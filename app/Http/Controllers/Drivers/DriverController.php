@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Drivers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
+use App\Models\DriverDocument;
 use App\Services\Drivers\RestComplianceService;
 use App\Services\Drivers\EcoScoreService;
 use Carbon\Carbon;
@@ -53,6 +54,42 @@ class DriverController extends Controller
         return response()->json([
             'message' => 'Chauffeur créé avec succès',
             'driver'  => $driver,
+        ], 201);
+    }
+
+    public function updateStatus(Request $request, Driver $driver): JsonResponse
+    {
+        $data = $request->validate([
+            'status' => 'required|in:available,on_duty,resting,on_leave,suspended',
+        ]);
+
+        $driver->update(['status' => $data['status']]);
+
+        return response()->json([
+            'message' => 'Statut mis à jour',
+            'driver'  => $driver->fresh(),
+        ]);
+    }
+
+    public function uploadDocument(Request $request, Driver $driver): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => 'required|in:license,medical,contract,other',
+            'file_path' => 'required|string|max:255',
+            'expires_at' => 'nullable|date',
+        ]);
+
+        $document = DriverDocument::create([
+            'driver_id' => $driver->id,
+            'type' => $data['type'],
+            'file_path' => $data['file_path'],
+            'expires_at' => $data['expires_at'] ?? null,
+            'uploaded_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Document enregistré',
+            'document' => $document,
         ], 201);
     }
 

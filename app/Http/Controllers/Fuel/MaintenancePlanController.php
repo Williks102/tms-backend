@@ -18,9 +18,10 @@ class MaintenancePlanController extends Controller
     {
         $query = MaintenancePlan::with('vehicle')
             ->when($request->vehicle_id, fn($q) => $q->where('vehicle_id', $request->vehicle_id))
-            ->when($request->status,     fn($q) => $q->where('status', $request->status));
+            ->when($request->status,     fn($q) => $q->where('status', $request->status))
+            ->orderByRaw('trigger_km IS NULL, trigger_km ASC');
 
-        return response()->json($query->orderBy('trigger_km')->paginate(20));
+        return response()->json($query->paginate(20));
     }
 
     // POST /api/v1/maintenance/plans
@@ -50,11 +51,29 @@ class MaintenancePlanController extends Controller
     public function due(): JsonResponse
     {
         $plans = MaintenancePlan::with('vehicle')
-            ->whereIn('status', ['due', 'overdue'])
-            ->orderByRaw("CASE status WHEN 'overdue' THEN 0 WHEN 'due' THEN 1 END")
-            ->get();
+            ->active()  // upcoming + due seulement
+            ->get()
+            ->map(function ($plan) {
+                if (!$plan->vehicle) return null;
+                
+                $remaining = $plan->kmRemaining($plan->vehicle);
+                
+                // Mettre à jour le statut basé sur le kilométrage réel
+                if ($remaining <= 0) {
+                    $plan->status = 'overdue';
+                } elseif ($remaining <= $plan->alert_km_before) {
+                    $plan->status = 'due';
+                }
+                
+                return $plan;
+            })
+            ->filter()  // Retirer les null
+            ->sortBy(function ($plan) {
+                // Trier overdue d'abord, puis due
+                return $plan->status === 'overdue' ? 0 : 1;
+            });
 
-        return response()->json(['data' => $plans]);
+        return response()->json(['data' => $plans->values()]);
     }
 
     // POST /api/v1/maintenance/records

@@ -64,7 +64,10 @@ class FuelVoucherController extends Controller
     public function approve(Request $request, FuelVoucher $voucher): JsonResponse
     {
         if (!$voucher->isPending()) {
-            return response()->json(['message' => 'Ce bon n\'est pas en attente'], 422);
+            return response()->json([
+                'message' => 'Ce bon n\'est pas en attente (statut: ' . $voucher->status . ')',
+                'errors'  => ['status' => ['Le bon n\'est pas en attente']],
+            ], 422);
         }
 
         $data = $request->validate([

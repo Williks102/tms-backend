@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Departure extends Model
@@ -62,6 +63,11 @@ class Departure extends Model
         return $this->belongsTo(ScheduleTemplate::class);
     }
 
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────
 
     public function scopeActive($query)
@@ -110,6 +116,16 @@ class Departure extends Model
     public function isAssigned(): bool
     {
         return $this->vehicle_id !== null && $this->driver_id !== null;
+    }
+
+    public function hasAvailableSeats(): bool
+    {
+        return $this->seats_available > 0;
+    }
+
+    public function isOpenForTicketSale(): bool
+    {
+        return in_array($this->status, ['scheduled', 'boarding']);
     }
 
     /**

@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Incidents\IncidentController;
 
 // Auth routes (outside sanctum middleware)
-Route::post('/login',  [AuthController::class, 'login']);
+// throttle:5,1 — 5 tentatives / minute / IP, en plus du verrou par compte dans AuthController
+Route::post('/login',  [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
 // Achat en ligne — endpoint public (simule la billetterie web/mobile, ex: ClicBillet).
@@ -66,6 +67,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/{driver}/scores',                   [DriverController::class, 'scores']);
         Route::post('/{driver}/scores/bonus',            [DriverController::class, 'assignBonus'])->middleware('role:manager');
         Route::post('/{driver}/documents',               [DriverController::class, 'uploadDocument'])->middleware('role:manager,rh');
+        Route::get('/{driver}/documents/{document}/download', [DriverController::class, 'downloadDocument'])->middleware('role:manager,rh');
         Route::get('/documents/expiring',                [DriverController::class, 'expiringDocuments']);
     });
 

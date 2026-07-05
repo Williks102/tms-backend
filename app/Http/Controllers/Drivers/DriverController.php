@@ -12,6 +12,8 @@ use App\Services\Drivers\EcoScoreService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DriverController extends Controller
 {
@@ -71,19 +73,24 @@ class DriverController extends Controller
         ]);
     }
 
+    // POST /api/v1/drivers/{driver}/documents
     public function uploadDocument(Request $request, Driver $driver): JsonResponse
     {
         $data = $request->validate([
-            'type' => 'required|in:license,medical,contract,other',
-            'file_path' => 'required|string|max:255',
+            'type'       => 'required|in:license,medical,contract,other',
+            'file'       => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5 Mo
             'expires_at' => 'nullable|date',
         ]);
 
+        // Stocké sur le disque privé ("local") — jamais servi directement par le
+        // webserver ; le nom de fichier est généré par Storage, jamais fourni par le client.
+        $path = $request->file('file')->store('driver-documents', 'local');
+
         $document = DriverDocument::create([
-            'driver_id' => $driver->id,
-            'type' => $data['type'],
-            'file_path' => $data['file_path'],
-            'expires_at' => $data['expires_at'] ?? null,
+            'driver_id'   => $driver->id,
+            'type'        => $data['type'],
+            'file_path'   => $path,
+            'expires_at'  => $data['expires_at'] ?? null,
             'uploaded_at' => now(),
         ]);
 
@@ -91,6 +98,15 @@ class DriverController extends Controller
             'message' => 'Document enregistré',
             'document' => $document,
         ], 201);
+    }
+
+    // GET /api/v1/drivers/{driver}/documents/{document}/download
+    public function downloadDocument(Driver $driver, DriverDocument $document): StreamedResponse
+    {
+        abort_unless($document->driver_id === $driver->id, 404);
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->download($document->file_path);
     }
 
     // GET /api/v1/drivers/{driver}

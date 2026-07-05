@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
@@ -19,13 +20,27 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
+        // Verrou par compte (en plus du throttle IP sur la route) — empêche
+        // le bruteforce d'un compte précis depuis des IP différentes.
+        $key = 'login:' . strtolower($data['email']) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            $seconds = RateLimiter::availableIn($key);
+            return response()->json([
+                'message' => "Trop de tentatives. Réessayez dans {$seconds}s.",
+            ], 429);
+        }
+
         $user = User::where('email', $data['email'])->first();
 
         if (!$user || !Hash::check($data['password'], $user->password)) {
+            RateLimiter::hit($key, 60);
             return response()->json([
                 'message' => 'Email ou mot de passe incorrect',
             ], 401);
         }
+
+        RateLimiter::clear($key);
 
         // Supprime les anciens tokens de cet appareil
         $user->tokens()->where('name', 'tms-web')->delete();

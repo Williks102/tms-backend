@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -15,6 +16,7 @@ class Route extends Model
         'code',
         'name',
         'origin_city',
+        'origin_station_id',
         'destination_city',
         'distance_km',
         'estimated_duration_min',
@@ -32,6 +34,11 @@ class Route extends Model
     ];
 
     // ── Relations ────────────────────────────────────────────────────────
+
+    public function originStation(): BelongsTo
+    {
+        return $this->belongsTo(Station::class, 'origin_station_id');
+    }
 
     public function stops(): HasMany
     {

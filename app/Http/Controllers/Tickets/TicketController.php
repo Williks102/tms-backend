@@ -23,7 +23,7 @@ class TicketController extends Controller
     // GET /api/v1/tickets
     public function index(Request $request): JsonResponse
     {
-        $query = Ticket::with(['departure.route', 'soldBy']);
+        $query = Ticket::with(['departure.route', 'departure.gate', 'destinationStop', 'soldBy']);
 
         if ($request->filled('departure_id')) $query->where('departure_id', $request->departure_id);
         if ($request->filled('status'))       $query->where('status', $request->status);
@@ -73,7 +73,7 @@ class TicketController extends Controller
     // GET /api/v1/tickets/{ticket}
     public function show(Ticket $ticket): JsonResponse
     {
-        $ticket->load(['departure.route', 'departure.vehicle', 'departure.driver', 'soldBy']);
+        $ticket->load(['departure.route', 'departure.vehicle', 'departure.driver', 'departure.gate', 'destinationStop', 'soldBy']);
 
         return response()->json($ticket);
     }
@@ -94,13 +94,14 @@ class TicketController extends Controller
     public function manifest(Departure $departure): JsonResponse
     {
         $tickets = $departure->tickets()
+            ->with('destinationStop')
             ->active()
             ->orderByRaw('seat_number IS NULL, seat_number')
             ->orderBy('purchased_at')
             ->get();
 
         return response()->json([
-            'departure' => $departure->load('route', 'vehicle'),
+            'departure' => $departure->load('route', 'vehicle', 'gate'),
             'data'      => $tickets,
             'summary'   => [
                 'total'    => $tickets->count(),

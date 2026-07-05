@@ -14,6 +14,11 @@ class RouteResource extends JsonResource
             'code'                   => $this->code,
             'name'                   => $this->name,
             'origin_city'            => $this->origin_city,
+            'origin_station'         => $this->whenLoaded('originStation', fn() => $this->originStation ? [
+                'id'   => $this->originStation->id,
+                'name' => $this->originStation->name,
+                'city' => $this->originStation->city,
+            ] : null),
             'destination_city'       => $this->destination_city,
             'distance_km'            => (float) $this->distance_km,
             'estimated_duration_min' => $this->estimated_duration_min,

@@ -14,7 +14,7 @@ class Ticket extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'reference', 'departure_id', 'passenger_name', 'passenger_phone',
+        'reference', 'departure_id', 'destination_stop_id', 'passenger_name', 'passenger_phone',
         'seat_number', 'channel', 'payment_method', 'price_fcfa', 'status',
         'sold_by', 'purchased_at', 'boarded_at', 'cancellation_reason',
     ];
@@ -27,8 +27,9 @@ class Ticket extends Model
 
     // ── Relations ──────────────────────────────────────────────────────
 
-    public function departure(): BelongsTo { return $this->belongsTo(Departure::class); }
-    public function soldBy(): BelongsTo    { return $this->belongsTo(User::class, 'sold_by'); }
+    public function departure(): BelongsTo      { return $this->belongsTo(Departure::class); }
+    public function soldBy(): BelongsTo         { return $this->belongsTo(User::class, 'sold_by'); }
+    public function destinationStop(): BelongsTo { return $this->belongsTo(RouteStop::class, 'destination_stop_id'); }
 
     // ── Scopes ─────────────────────────────────────────────────────────
 

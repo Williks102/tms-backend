@@ -15,55 +15,66 @@ class GateAssignmentService
     private const BUFFER_MINUTES = 30;
 
     /**
-     * Trouve et retourne le code du premier quai disponible pour un départ.
+     * Trouve et retourne l'id du premier quai disponible pour un départ.
+     * Si la ligne a une gare de départ définie (route.origin_station_id),
+     * seuls les quais de cette gare sont considérés — sinon (ligne sans gare
+     * assignée), la recherche reste globale, comme avant.
      * Retourne null si aucun quai n'est libre.
      */
-    public function assignGate(Departure $departure): ?string
+    public function assignGate(Departure $departure): ?int
     {
         $departureAt = Carbon::parse($departure->departure_datetime);
         $windowStart = $departureAt->copy()->subMinutes(self::BUFFER_MINUTES);
         $windowEnd   = $departureAt->copy()->addMinutes(self::BUFFER_MINUTES);
 
         // Récupère tous les quais occupés sur cette fenêtre horaire
-        $busyGates = Departure::where('id', '!=', $departure->id)
+        $busyGateIds = Departure::where('id', '!=', $departure->id)
             ->where('status', '!=', 'cancelled')
             ->where(function ($query) use ($windowStart, $windowEnd) {
                 // Chevauche la fenêtre si: departure < fin ET estimated_arrival > début
                 $query->where('departure_datetime', '<', $windowEnd)
                       ->where('estimated_arrival', '>', $windowStart);
             })
-            ->whereNotNull('boarding_gate')
-            ->pluck('boarding_gate')
+            ->whereNotNull('boarding_gate_id')
+            ->pluck('boarding_gate_id')
             ->toArray();
 
-        // Cherche le premier quai actif non occupé
-        $availableGate = BoardingGate::active()
-            ->whereNotIn('gate_code', $busyGates)
-            ->orderBy('gate_code') // Attribution dans l'ordre (Q1, Q2...)
-            ->first();
+        // Cherche le premier quai actif non occupé, dans la gare de la ligne si connue
+        $query = BoardingGate::active()->whereNotIn('id', $busyGateIds);
 
-        return $availableGate?->gate_code;
+        $stationId = $departure->route?->origin_station_id;
+        if ($stationId) {
+            $query->where('station_id', $stationId);
+        }
+
+        $availableGate = $query->orderBy('gate_code')->first(); // Attribution dans l'ordre (Q1, Q2...)
+
+        return $availableGate?->id;
     }
 
     /**
-     * Retourne tous les quais disponibles à un moment donné.
+     * Retourne tous les quais disponibles à un moment donné, optionnellement
+     * filtrés sur une gare précise.
      * Utilisé par l'endpoint GET /api/v1/planning/gates/available
      */
-    public function getAvailableGates(Carbon $at): \Illuminate\Support\Collection
+    public function getAvailableGates(Carbon $at, ?int $stationId = null): \Illuminate\Support\Collection
     {
         $windowStart = $at->copy()->subMinutes(self::BUFFER_MINUTES);
         $windowEnd   = $at->copy()->addMinutes(self::BUFFER_MINUTES);
 
-        $busyGates = Departure::where('status', '!=', 'cancelled')
+        $busyGateIds = Departure::where('status', '!=', 'cancelled')
             ->where('departure_datetime', '<', $windowEnd)
             ->where('estimated_arrival', '>', $windowStart)
-            ->whereNotNull('boarding_gate')
-            ->pluck('boarding_gate')
+            ->whereNotNull('boarding_gate_id')
+            ->pluck('boarding_gate_id')
             ->toArray();
 
-        return BoardingGate::active()
-            ->whereNotIn('gate_code', $busyGates)
-            ->orderBy('gate_code')
-            ->get();
+        $query = BoardingGate::active()->whereNotIn('id', $busyGateIds);
+
+        if ($stationId) {
+            $query->where('station_id', $stationId);
+        }
+
+        return $query->orderBy('gate_code')->get();
     }
 }

@@ -8,6 +8,7 @@ use App\Http\Requests\Planning\UpdateDepartureStatusRequest;
 use App\Http\Resources\Planning\DepartureResource;
 use App\Models\Departure;
 use App\Services\Planning\DepartureService;
+use App\Services\Planning\GateAssignmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ class DepartureController extends Controller
 {
     public function __construct(
         private readonly DepartureService $departureService,
+        private readonly GateAssignmentService $gateService,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────
@@ -24,7 +26,7 @@ class DepartureController extends Controller
     // ─────────────────────────────────────────────────────────────────────
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Departure::with(['route', 'vehicle', 'driver'])
+        $query = Departure::with(['route', 'vehicle', 'driver', 'gate'])
             ->notCancelled();
 
         // Filtres optionnels
@@ -56,7 +58,7 @@ class DepartureController extends Controller
     // ─────────────────────────────────────────────────────────────────────
     public function live(): AnonymousResourceCollection
     {
-        $departures = Departure::with(['route', 'vehicle', 'driver'])
+        $departures = Departure::with(['route', 'vehicle', 'driver', 'gate'])
             ->live()
             ->orderBy('departure_datetime')
             ->get();
@@ -69,7 +71,7 @@ class DepartureController extends Controller
     // ─────────────────────────────────────────────────────────────────────
     public function show(Departure $departure): DepartureResource
     {
-        $departure->load(['route.stops', 'vehicle', 'driver', 'scheduleTemplate']);
+        $departure->load(['route.stops', 'vehicle', 'driver', 'scheduleTemplate', 'gate']);
 
         return new DepartureResource($departure);
     }
@@ -152,5 +154,23 @@ class DepartureController extends Controller
         );
 
         return response()->json(['data' => $vehicles]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GET /api/v1/planning/gates/available?at=
+    // ─────────────────────────────────────────────────────────────────────
+    public function availableGates(Request $request): JsonResponse
+    {
+        $request->validate([
+            'at'         => 'required|date',
+            'station_id' => 'nullable|integer|exists:stations,id',
+        ]);
+
+        $gates = $this->gateService->getAvailableGates(
+            Carbon::parse($request->at),
+            $request->integer('station_id') ?: null
+        );
+
+        return response()->json(['data' => $gates]);
     }
 }

@@ -3,17 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class BoardingGate extends Model
+class Station extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'station_id',
-        'gate_code',
+        'name',
+        'city',
         'is_active',
     ];
 
@@ -23,14 +22,14 @@ class BoardingGate extends Model
 
     // ── Relations ────────────────────────────────────────────────────────
 
-    public function station(): BelongsTo
+    public function gates(): HasMany
     {
-        return $this->belongsTo(Station::class);
+        return $this->hasMany(BoardingGate::class);
     }
 
-    public function departures(): HasMany
+    public function routes(): HasMany
     {
-        return $this->hasMany(Departure::class, 'boarding_gate_id');
+        return $this->hasMany(Route::class, 'origin_station_id');
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────

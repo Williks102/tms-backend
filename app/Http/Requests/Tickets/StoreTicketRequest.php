@@ -16,12 +16,13 @@ class StoreTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'departure_id'    => 'required|exists:departures,id',
-            'passenger_name'  => 'required|string|max:150',
-            'passenger_phone' => 'nullable|string|max:30',
-            'seat_number'     => 'nullable|string|max:10',
-            'payment_method'  => 'required|in:cash,mobile_money,card',
-            'price_fcfa'      => 'nullable|numeric|min:0',
+            'departure_id'         => 'required|exists:departures,id',
+            'destination_stop_id'  => 'nullable|integer|exists:route_stops,id',
+            'passenger_name'       => 'required|string|max:150',
+            'passenger_phone'      => 'nullable|string|max:30',
+            'seat_number'          => 'nullable|string|max:10',
+            'payment_method'       => 'required|in:cash,mobile_money,card',
+            'price_fcfa'           => 'nullable|numeric|min:0',
         ];
     }
 

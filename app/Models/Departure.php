@@ -22,7 +22,7 @@ class Departure extends Model
         'estimated_arrival',
         'actual_departure',
         'actual_arrival',
-        'boarding_gate',
+        'boarding_gate_id',
         'seats_available',
         'status',
         'cancellation_reason',
@@ -36,6 +36,12 @@ class Departure extends Model
         'actual_arrival'     => 'datetime',
         'seats_available'    => 'integer',
     ];
+
+    // `boarding_gate` n'est plus une colonne (voir boarding_gate_id + gate())
+    // mais reste attendu comme champ par le frontend — $appends le fait figurer
+    // dans toArray()/toJson() même quand le modèle est sérialisé directement
+    // (sans passer par DepartureResource), ex: Ticket::with('departure...').
+    protected $appends = ['boarding_gate'];
 
     // ── Relations ────────────────────────────────────────────────────────
 
@@ -61,6 +67,16 @@ class Departure extends Model
     public function scheduleTemplate(): BelongsTo
     {
         return $this->belongsTo(ScheduleTemplate::class);
+    }
+
+    // Nommée "gate" (pas "boardingGate") pour éviter toute collision avec
+    // l'accesseur getBoardingGateAttribute() ci-dessous : Eloquent résout les
+    // mutateurs par version "studly" du nom, et "boardingGate" ↔ "boarding_gate"
+    // partagent la même forme studly ("BoardingGate"), ce qui créerait une
+    // récursion infinie si la relation portait ce nom.
+    public function gate(): BelongsTo
+    {
+        return $this->belongsTo(BoardingGate::class, 'boarding_gate_id');
     }
 
     public function tickets(): HasMany
@@ -106,6 +122,16 @@ class Departure extends Model
     public function isManual(): bool
     {
         return $this->schedule_template_id === null;
+    }
+
+    /**
+     * Code du quai (ex: "Q1"), résolu via la relation gate().
+     * Conserve la compatibilité de l'API/frontend qui attend `boarding_gate`
+     * comme chaîne, alors que la colonne réelle est `boarding_gate_id`.
+     */
+    public function getBoardingGateAttribute(): ?string
+    {
+        return $this->gate?->gate_code;
     }
 
     public function isCancelled(): bool

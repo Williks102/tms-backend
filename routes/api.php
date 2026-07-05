@@ -9,9 +9,11 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
 use App\Http\Controllers\Fuel\MaintenancePlanController;
+use App\Http\Controllers\Planning\BoardingGateController;
 use App\Http\Controllers\Planning\DepartureController;
 use App\Http\Controllers\Planning\RouteController;
 use App\Http\Controllers\Planning\ScheduleTemplateController;
+use App\Http\Controllers\Planning\StationController;
 use App\Http\Controllers\Tickets\TicketController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Incidents\IncidentController;
@@ -32,7 +34,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::prefix('planning')->group(function () {
         Route::apiResource('routes', RouteController::class)->only(['index', 'show']);
         Route::apiResource('routes', RouteController::class)->only(['store', 'update', 'destroy'])->middleware('role:manager');
-        Route::post('routes/{route}/stops', [RouteController::class, 'addStop'])->middleware('role:manager');
+        Route::post('routes/{route}/stops',                [RouteController::class, 'addStop'])->middleware('role:manager');
+        Route::put('routes/{route}/stops/{stop}',          [RouteController::class, 'updateStop'])->middleware('role:manager');
+        Route::delete('routes/{route}/stops/{stop}',       [RouteController::class, 'deleteStop'])->middleware('role:manager');
 
         Route::apiResource('templates', ScheduleTemplateController::class)->only(['index', 'show']);
         Route::apiResource('templates', ScheduleTemplateController::class)->only(['store', 'update', 'destroy'])->middleware('role:manager');
@@ -47,7 +51,18 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('departures/{departure}',          [DepartureController::class, 'destroy'])->middleware('role:manager');
 
         Route::get('vehicles/available',                 [DepartureController::class, 'availableVehicles']);
+
+        // IMPORTANT: routes nommées avant {gate}
         Route::get('gates/available',                    [DepartureController::class, 'availableGates']);
+        Route::get('gates',                               [BoardingGateController::class, 'index']);
+        Route::post('gates',                              [BoardingGateController::class, 'store'])->middleware('role:manager');
+        Route::put('gates/{gate}',                        [BoardingGateController::class, 'update'])->middleware('role:manager');
+        Route::delete('gates/{gate}',                     [BoardingGateController::class, 'destroy'])->middleware('role:manager');
+
+        Route::get('stations',                            [StationController::class, 'index']);
+        Route::post('stations',                           [StationController::class, 'store'])->middleware('role:manager');
+        Route::put('stations/{station}',                  [StationController::class, 'update'])->middleware('role:manager');
+        Route::delete('stations/{station}',               [StationController::class, 'destroy'])->middleware('role:manager');
     });
 
     // ── MODULE CHAUFFEURS ─────────────────────────────────────────────

@@ -17,7 +17,7 @@ class RouteController extends Controller
     // ─────────────────────────────────────────────────────────────────────
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Route::active();
+        $query = Route::active()->with('originStation');
 
         if ($request->filled('origin')) {
             $query->where('origin_city', 'like', "%{$request->origin}%");
@@ -45,6 +45,7 @@ class RouteController extends Controller
             'code'                   => 'required|string|max:20|unique:routes,code',
             'name'                   => 'required|string|max:100',
             'origin_city'            => 'required|string|max:100',
+            'origin_station_id'      => 'nullable|integer|exists:stations,id',
             'destination_city'       => 'required|string|max:100',
             'distance_km'            => 'required|numeric|min:1',
             'estimated_duration_min' => 'required|integer|min:1',
@@ -56,7 +57,7 @@ class RouteController extends Controller
 
         return response()->json([
             'message' => 'Ligne créée avec succès',
-            'route'   => new RouteResource($route),
+            'route'   => new RouteResource($route->load('originStation')),
         ], 201);
     }
 
@@ -65,7 +66,7 @@ class RouteController extends Controller
     // ─────────────────────────────────────────────────────────────────────
     public function show(Route $route): RouteResource
     {
-        $route->load('stops');
+        $route->load(['stops', 'originStation']);
         return new RouteResource($route);
     }
 
@@ -78,6 +79,7 @@ class RouteController extends Controller
             'code'                   => "string|max:20|unique:routes,code,{$route->id}",
             'name'                   => 'string|max:100',
             'origin_city'            => 'string|max:100',
+            'origin_station_id'      => 'nullable|integer|exists:stations,id',
             'destination_city'       => 'string|max:100',
             'distance_km'            => 'numeric|min:1',
             'estimated_duration_min' => 'integer|min:1',
@@ -90,7 +92,7 @@ class RouteController extends Controller
 
         return response()->json([
             'message' => 'Ligne mise à jour',
-            'route'   => new RouteResource($route->fresh('stops')),
+            'route'   => new RouteResource($route->fresh(['stops', 'originStation'])),
         ]);
     }
 
@@ -149,5 +151,56 @@ class RouteController extends Controller
             'message' => 'Arrêt ajouté',
             'stop'    => $stop,
         ], 201);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PUT /api/v1/planning/routes/{route}/stops/{stop}
+    // ─────────────────────────────────────────────────────────────────────
+    public function updateStop(Request $request, Route $route, RouteStop $stop): JsonResponse
+    {
+        if ($stop->route_id !== $route->id) {
+            return response()->json(['message' => 'Cet arrêt n\'appartient pas à cette ligne.'], 404);
+        }
+
+        $data = $request->validate([
+            'city_name'               => 'string|max:100',
+            'stop_order'              => 'integer|min:1',
+            'distance_from_origin_km' => 'numeric|min:0.1',
+            'fare_from_origin'        => 'numeric|min:0',
+        ]);
+
+        if (isset($data['stop_order'])) {
+            $conflictOrder = $route->stops()
+                ->where('stop_order', $data['stop_order'])
+                ->where('id', '!=', $stop->id)
+                ->exists();
+
+            if ($conflictOrder) {
+                return response()->json([
+                    'message' => "L'ordre {$data['stop_order']} est déjà pris sur cette ligne.",
+                ], 422);
+            }
+        }
+
+        $stop->update($data);
+
+        return response()->json([
+            'message' => 'Arrêt mis à jour',
+            'stop'    => $stop->fresh(),
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DELETE /api/v1/planning/routes/{route}/stops/{stop}
+    // ─────────────────────────────────────────────────────────────────────
+    public function deleteStop(Route $route, RouteStop $stop): JsonResponse
+    {
+        if ($stop->route_id !== $route->id) {
+            return response()->json(['message' => 'Cet arrêt n\'appartient pas à cette ligne.'], 404);
+        }
+
+        $stop->delete();
+
+        return response()->json(['message' => 'Arrêt supprimé avec succès']);
     }
 }

@@ -5,6 +5,7 @@
 namespace App\Services\Tickets;
 
 use App\Models\Departure;
+use App\Models\RouteStop;
 use App\Models\Ticket;
 use App\Services\Fuel\AlertDispatcher;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,17 @@ class TicketService
             throw new \Exception("Vente impossible : ce départ est {$departure->status}");
         }
 
+        // Billet vers un arrêt intermédiaire (ligne dynamique) plutôt que le
+        // terminus de la ligne — le tarif vient alors de route_stops.fare_from_origin.
+        $destinationStop = null;
+        if (!empty($data['destination_stop_id'])) {
+            $destinationStop = RouteStop::find($data['destination_stop_id']);
+
+            if (!$destinationStop || $destinationStop->route_id !== $departure->route_id) {
+                throw new \Exception("Cet arrêt n'appartient pas à la ligne de ce départ");
+            }
+        }
+
         if (!$departure->hasAvailableSeats()) {
             $this->alertDispatcher->create(
                 type:     'overbooking',
@@ -56,7 +68,7 @@ class TicketService
             throw new \Exception('Aucune place disponible sur ce départ');
         }
 
-        return DB::transaction(function () use ($data, $channel, $soldBy) {
+        return DB::transaction(function () use ($data, $channel, $soldBy, $destinationStop) {
             // Reverrouillée ici pour empêcher une vente concurrente de dépasser le stock
             $departure = Departure::lockForUpdate()->findOrFail($data['departure_id']);
 
@@ -68,18 +80,21 @@ class TicketService
             $count = Ticket::whereYear('created_at', $year)->count() + 1;
             $ref   = sprintf('TCK-%s-%06d', $year, $count);
 
+            $defaultFare = $destinationStop?->fare_from_origin ?? $departure->route->base_fare;
+
             $ticket = Ticket::create([
-                'reference'       => $ref,
-                'departure_id'    => $departure->id,
-                'passenger_name'  => $data['passenger_name'],
-                'passenger_phone' => $data['passenger_phone'] ?? null,
-                'seat_number'     => $data['seat_number'] ?? null,
-                'channel'         => $channel,
-                'payment_method'  => $data['payment_method'],
-                'price_fcfa'      => $data['price_fcfa'] ?? $departure->route->base_fare,
-                'status'          => 'paid',
-                'sold_by'         => $soldBy,
-                'purchased_at'    => now(),
+                'reference'           => $ref,
+                'departure_id'        => $departure->id,
+                'destination_stop_id' => $destinationStop?->id,
+                'passenger_name'      => $data['passenger_name'],
+                'passenger_phone'     => $data['passenger_phone'] ?? null,
+                'seat_number'         => $data['seat_number'] ?? null,
+                'channel'             => $channel,
+                'payment_method'      => $data['payment_method'],
+                'price_fcfa'          => $data['price_fcfa'] ?? $defaultFare,
+                'status'              => 'paid',
+                'sold_by'             => $soldBy,
+                'purchased_at'        => now(),
             ]);
 
             $departure->decrement('seats_available');
@@ -90,7 +105,7 @@ class TicketService
                 'departure' => $departure->id,
             ]);
 
-            return $ticket->fresh(['departure.route', 'soldBy']);
+            return $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop', 'soldBy']);
         });
     }
 
@@ -137,7 +152,7 @@ class TicketService
 
             Log::info("Billet {$ticket->reference} → {$newStatus}");
 
-            return $ticket->fresh(['departure.route', 'soldBy']);
+            return $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop', 'soldBy']);
         });
     }
 }

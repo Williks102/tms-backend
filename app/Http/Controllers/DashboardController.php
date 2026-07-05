@@ -215,7 +215,7 @@ class DashboardController extends Controller
 
     private function liveDepartures(): \Illuminate\Support\Collection
     {
-        return Departure::with(['route:id,code,name,origin_city,destination_city', 'vehicle:id,plate_number,model', 'driver:id,first_name,last_name'])
+        return Departure::with(['route:id,code,name,origin_city,destination_city', 'vehicle:id,plate_number,model', 'driver:id,first_name,last_name', 'gate:id,gate_code'])
             ->whereIn('status', ['boarding', 'departed'])
             ->orderBy('departure_datetime')
             ->get()

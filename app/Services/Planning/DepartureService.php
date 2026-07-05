@@ -56,9 +56,9 @@ class DepartureService
             ]);
 
             // 2. Attribution automatique du quai
-            $gate = $this->gateService->assignGate($departure);
-            if ($gate) {
-                $departure->update(['boarding_gate' => $gate]);
+            $gateId = $this->gateService->assignGate($departure);
+            if ($gateId) {
+                $departure->update(['boarding_gate_id' => $gateId]);
             }
             // Si aucun quai dispo, on laisse null et le gestionnaire assignera manuellement
 

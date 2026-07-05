@@ -6,12 +6,15 @@ namespace Database\Seeders;
 
 use App\Models\Route;
 use App\Models\RouteStop;
+use App\Models\Station;
 use Illuminate\Database\Seeder;
 
 class RouteSeeder extends Seeder
 {
     public function run(): void
     {
+        $adjameId = Station::where('name', "Gare d'Adjamé")->value('id');
+
         $routes = [
             [
                 'code'                   => 'ABJ-BKE',
@@ -93,6 +96,10 @@ class RouteSeeder extends Seeder
         ];
 
         foreach ($routes as $routeData) {
+            if ($routeData['origin_city'] === 'Abidjan') {
+                $routeData['origin_station_id'] = $adjameId;
+            }
+
             $route = Route::firstOrCreate(
                 ['code' => $routeData['code']],
                 $routeData

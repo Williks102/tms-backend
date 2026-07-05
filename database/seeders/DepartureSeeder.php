@@ -5,6 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace Database\Seeders;
 
+use App\Models\BoardingGate;
 use App\Models\Departure;
 use App\Models\Driver;
 use App\Models\Route;
@@ -19,7 +20,8 @@ class DepartureSeeder extends Seeder
         $vehicles = Vehicle::where('status', '!=', 'inactive')->get();
         $drivers  = Driver::where('status', '!=', 'suspended')->where('status', '!=', 'on_leave')->get();
         $routes   = Route::active()->get();
-        $gates    = ['Q1', 'Q2', 'Q3', 'Q4'];
+        $gates    = BoardingGate::whereHas('station', fn($q) => $q->where('name', "Gare d'Adjamé"))
+            ->where('is_active', true)->pluck('id')->all();
 
         $vehicleIdx = 0;
         $driverIdx  = 0;
@@ -54,7 +56,7 @@ class DepartureSeeder extends Seeder
                     'estimated_arrival'  => $estimatedArrival,
                     'actual_departure'   => $actualDepart,
                     'actual_arrival'     => $actualArrival,
-                    'boarding_gate'      => $gates[array_rand($gates)],
+                    'boarding_gate_id'   => $gates[array_rand($gates)],
                     'seats_available'    => $vehicle->capacity,
                     'status'             => 'arrived',
                 ]);
@@ -118,7 +120,7 @@ class DepartureSeeder extends Seeder
                 'driver_id'          => $driver->id,
                 'departure_datetime' => $departureAt,
                 'estimated_arrival'  => $estimatedArrival,
-                'boarding_gate'      => $gates[$i % count($gates)],
+                'boarding_gate_id'   => $gates[$i % count($gates)],
                 'seats_available'    => $vehicle->capacity,
                 'status'             => $dep['status'],
             ];

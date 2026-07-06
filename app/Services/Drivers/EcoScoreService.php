@@ -20,9 +20,11 @@ class EcoScoreService
     {
         // ── Composante 1: Carburant (40 pts) ──────────────────────────
         // ratio = 1.0 → 40pts | ratio = 1.5 → 20pts | ratio ≥ 2.0 → 0pts
+        // Plafonné à 40 : un ratio < 1 (moins consommé que le théorique)
+        // ne doit pas dépasser le maximum de la composante.
         $fuelRatio  = $stats->fuel_consumed_liters
             / max($stats->fuel_theoretical_liters, 0.1);
-        $fuelScore  = max(0.0, 40.0 * (2.0 - $fuelRatio));
+        $fuelScore  = min(40.0, max(0.0, 40.0 * (2.0 - $fuelRatio)));
 
         // ── Composante 2: Excès de vitesse (30 pts) ───────────────────
         // Chaque événement coûte 5 points, plancher à 0
@@ -33,7 +35,7 @@ class EcoScoreService
         // delay_min négatif (en avance) = pas de bonus au-delà de 30
         $delayScore = max(0.0, 30.0 - max(0, $stats->delay_min));
 
-        $total = round($fuelScore + $speedScore + $delayScore, 2);
+        $total = round(min(100.0, $fuelScore + $speedScore + $delayScore), 2);
 
         $stats->update(['eco_score' => $total]);
 

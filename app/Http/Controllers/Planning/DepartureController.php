@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Planning;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Planning\StoreDepartureRequest;
+use App\Http\Requests\Planning\UpdateDepartureRequest;
 use App\Http\Requests\Planning\UpdateDepartureStatusRequest;
 use App\Http\Resources\Planning\DepartureResource;
 use App\Models\Departure;
@@ -96,6 +97,25 @@ class DepartureController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // PUT /api/v1/planning/departures/{departure}
+    // ─────────────────────────────────────────────────────────────────────
+    public function update(UpdateDepartureRequest $request, Departure $departure): JsonResponse
+    {
+        try {
+            $departure = $this->departureService->update($departure, $request->validated());
+
+            return response()->json([
+                'message'   => 'Départ mis à jour',
+                'departure' => new DepartureResource($departure),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // PATCH /api/v1/planning/departures/{departure}/status
     // ─────────────────────────────────────────────────────────────────────
     public function updateStatus(
@@ -144,13 +164,15 @@ class DepartureController extends Controller
     public function availableVehicles(Request $request): JsonResponse
     {
         $request->validate([
-            'departure_datetime' => 'required|date',
-            'estimated_arrival'  => 'required|date|after:departure_datetime',
+            'departure_datetime'    => 'required|date',
+            'estimated_arrival'     => 'required|date|after:departure_datetime',
+            'exclude_departure_id'  => 'nullable|integer|exists:departures,id',
         ]);
 
         $vehicles = $this->departureService->getAvailableVehicles(
             Carbon::parse($request->departure_datetime),
-            Carbon::parse($request->estimated_arrival)
+            Carbon::parse($request->estimated_arrival),
+            $request->integer('exclude_departure_id') ?: null
         );
 
         return response()->json(['data' => $vehicles]);

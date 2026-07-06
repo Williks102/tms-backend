@@ -1,3 +1,4 @@
+<?php
 // ══════════════════════════════════════════════════════════════════════════
 // app/Observers/FuelConsumptionObserver.php
 // Enregistrer dans AppServiceProvider::boot():

@@ -3,7 +3,9 @@
 namespace App\Services\Planning;
 
 use App\Models\Departure;
+use App\Models\Driver;
 use App\Models\Vehicle;
+use App\Services\Drivers\RestComplianceService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -11,6 +13,7 @@ class DepartureService
 {
     public function __construct(
         private readonly GateAssignmentService $gateService,
+        private readonly RestComplianceService $restService,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────
@@ -95,6 +98,92 @@ class DepartureService
         ]);
 
         return $departure->fresh();
+    }
+
+    /**
+     * Affecte un chauffeur à un départ existant.
+     *
+     * @throws \Exception si chauffeur non conforme (statut, documents, repos)
+     */
+    public function assignDriver(Departure $departure, int $driverId): Departure
+    {
+        $driver = Driver::findOrFail($driverId);
+
+        $check = $this->restService->canDrive($driver, Carbon::parse($departure->departure_datetime));
+
+        if (!$check['compliant']) {
+            throw new \Exception("Chauffeur indisponible: {$check['message']}");
+        }
+
+        $departure->update(['driver_id' => $driverId]);
+
+        return $departure->fresh();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Modification d'un départ existant
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Modifie un départ programmé : horaires, véhicule, chauffeur, quai, notes.
+     * La ligne (route_id) n'est volontairement pas modifiable — un trajet
+     * erroné doit être annulé et recréé (impacte tarifs/arrêts/billets déjà émis).
+     *
+     * @throws \Exception si le départ n'est plus "scheduled", ou si le
+     *                     véhicule/chauffeur proposé n'est pas disponible
+     */
+    public function update(Departure $departure, array $data): Departure
+    {
+        if ($departure->status !== 'scheduled') {
+            throw new \Exception("Modification impossible : ce départ est déjà {$departure->status}.");
+        }
+
+        return DB::transaction(function () use ($departure, $data) {
+            if (array_key_exists('departure_datetime', $data) || array_key_exists('estimated_arrival', $data)) {
+                $departureAt      = Carbon::parse($data['departure_datetime'] ?? $departure->departure_datetime);
+                $estimatedArrival = Carbon::parse($data['estimated_arrival'] ?? $departure->estimated_arrival);
+
+                if (!$estimatedArrival->gt($departureAt)) {
+                    throw new \Exception('L\'heure d\'arrivée doit être après l\'heure de départ');
+                }
+
+                if ($departure->vehicle_id) {
+                    $check = $this->isVehicleAvailable($departure->vehicle_id, $departureAt, $estimatedArrival, $departure->id);
+                    if (!$check['available']) {
+                        throw new \Exception("Véhicule indisponible sur ce nouveau créneau: {$check['reason']}");
+                    }
+                }
+
+                $departure->update([
+                    'departure_datetime' => $departureAt,
+                    'estimated_arrival'  => $estimatedArrival,
+                ]);
+            }
+
+            foreach (['seats_available', 'notes', 'boarding_gate_id'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $departure->update([$field => $data[$field]]);
+                }
+            }
+
+            if (array_key_exists('vehicle_id', $data)) {
+                if ($data['vehicle_id']) {
+                    $this->assignVehicle($departure->fresh(), $data['vehicle_id']);
+                } else {
+                    $departure->update(['vehicle_id' => null]);
+                }
+            }
+
+            if (array_key_exists('driver_id', $data)) {
+                if ($data['driver_id']) {
+                    $this->assignDriver($departure->fresh(), $data['driver_id']);
+                } else {
+                    $departure->update(['driver_id' => null]);
+                }
+            }
+
+            return $departure->fresh(['route', 'vehicle', 'driver']);
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -201,10 +290,11 @@ class DepartureService
     /**
      * Retourne les véhicules disponibles à une datetime donnée.
      */
-    public function getAvailableVehicles(Carbon $at, Carbon $estimatedReturn): \Illuminate\Support\Collection
+    public function getAvailableVehicles(Carbon $at, Carbon $estimatedReturn, ?int $excludeDepartureId = null): \Illuminate\Support\Collection
     {
         // IDs des véhicules occupés sur cette plage
         $busyVehicleIds = Departure::where('status', '!=', 'cancelled')
+            ->when($excludeDepartureId, fn ($q) => $q->where('id', '!=', $excludeDepartureId))
             ->where('departure_datetime', '<', $estimatedReturn)
             ->where('estimated_arrival', '>', $at)
             ->whereNotNull('vehicle_id')

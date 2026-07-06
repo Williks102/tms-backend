@@ -48,6 +48,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('departures',                         [DepartureController::class, 'index']);
         Route::post('departures',                        [DepartureController::class, 'store'])->middleware('role:manager');
         Route::get('departures/{departure}',             [DepartureController::class, 'show']);
+        Route::put('departures/{departure}',             [DepartureController::class, 'update'])->middleware('role:manager');
         Route::patch('departures/{departure}/status',    [DepartureController::class, 'updateStatus'])->middleware('role:manager');
         Route::delete('departures/{departure}',          [DepartureController::class, 'destroy'])->middleware('role:manager');
 

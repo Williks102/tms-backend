@@ -9,6 +9,7 @@ enum Role: string
     case DISPATCHER = 'dispatcher';
     case RH         = 'rh';
     case CAISSIER   = 'caissier';
+    case DRIVER     = 'driver';
 
     public function label(): string
     {
@@ -18,6 +19,7 @@ enum Role: string
             self::DISPATCHER => 'Dispatcher',
             self::RH         => 'RH',
             self::CAISSIER   => 'Caissier',
+            self::DRIVER     => 'Chauffeur',
         };
     }
 }

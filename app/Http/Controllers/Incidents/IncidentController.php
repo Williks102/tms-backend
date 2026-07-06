@@ -65,6 +65,38 @@ class IncidentController extends Controller
         }
     }
 
+    // POST /api/v1/incidents/mine — libre-service chauffeur : driver_id forcé
+    // côté serveur (jamais celui du body, contrairement à store() qui reste
+    // utilisé par un dispatcher/manager pour signaler au nom d'un autre chauffeur)
+    public function storeMine(Request $request): JsonResponse
+    {
+        $driver = $request->user()->driver;
+        abort_unless($driver, 403, 'Ce compte n\'est lié à aucun profil chauffeur');
+
+        $data = $request->validate([
+            'departure_id'          => 'nullable|exists:departures,id',
+            'vehicle_id'            => 'required|exists:vehicles,id',
+            'category'              => 'required|in:mechanical,accident,passenger,road,driver,other',
+            'severity'              => 'required|in:low,medium,high,critical',
+            'title'                 => 'required|string|max:200',
+            'description'           => 'required|string',
+            'location'              => 'nullable|string|max:200',
+            'occurred_at'           => 'required|date',
+        ]);
+
+        $data['driver_id'] = $driver->id;
+
+        try {
+            $incident = $this->incidentService->create($data, $request->user()->id);
+            return response()->json([
+                'message'  => "Incident {$incident->reference} créé",
+                'incident' => $incident,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
     // GET /api/v1/incidents/{incident}
     public function show(Incident $incident): JsonResponse
     {

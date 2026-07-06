@@ -4,8 +4,11 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace Database\Seeders;
 
+use App\Enums\Role;
 use App\Models\Driver;
+use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DriverSeeder extends Seeder
 {
@@ -112,10 +115,25 @@ class DriverSeeder extends Seeder
         ];
 
         foreach ($drivers as $driver) {
-            Driver::firstOrCreate(
+            $driverModel = Driver::firstOrCreate(
                 ['employee_number' => $driver['employee_number']],
                 $driver
             );
+
+            // Compte de connexion du chauffeur — email dérivé du matricule, mot de
+            // passe 'password' comme les autres comptes de test.
+            $email = strtolower($driverModel->employee_number) . '@tms-ci.com';
+            $user = User::firstOrCreate(
+                ['email' => $email],
+                [
+                    'name'     => "{$driverModel->first_name} {$driverModel->last_name}",
+                    'password' => Hash::make('password'),
+                    'role'     => Role::DRIVER,
+                ]
+            );
+            if ($driverModel->user_id !== $user->id) {
+                $driverModel->update(['user_id' => $user->id]);
+            }
         }
 
         $this->command->info('  Chauffeurs créés: ' . count($drivers));

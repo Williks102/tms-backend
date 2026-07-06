@@ -5,12 +5,17 @@
 //   Departure::observe(DepartureObserver::class);
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Observers;
- 
+
 use App\Models\Departure;
+use App\Services\Drivers\RestComplianceService;
 use Illuminate\Support\Facades\Log;
- 
+
 class DepartureObserver
 {
+    public function __construct(
+        private readonly RestComplianceService $restService,
+    ) {}
+
     /**
      * Déclenché après chaque création de départ.
      */
@@ -63,11 +68,16 @@ class DepartureObserver
  
     private function onDeparted(Departure $departure): void
     {
-        // Crée le DriverRestLog (module Chauffeurs)
-        if ($departure->driver_id) {
-            // \App\Jobs\Drivers\StartDutyLog::dispatch($departure);
+        // Crée le DriverRestLog (module Chauffeurs). Enveloppé en try/catch :
+        // un souci de suivi de repos ne doit jamais empêcher le départ lui-même.
+        if ($departure->driver_id && $departure->driver) {
+            try {
+                $this->restService->startDuty($departure->driver, $departure);
+            } catch (\Exception $e) {
+                Log::error('Échec startDuty', ['departure_id' => $departure->id, 'error' => $e->getMessage()]);
+            }
         }
- 
+
         // Met le véhicule en statut on_trip
         $departure->vehicle?->update(['status' => 'on_trip']);
     }
@@ -77,9 +87,16 @@ class DepartureObserver
         // Remet le véhicule disponible
         $departure->vehicle?->update(['status' => 'available']);
  
-        // Ferme le DriverRestLog et démarre le repos
-        if ($departure->driver_id) {
-            // \App\Jobs\Drivers\EndDutyLog::dispatch($departure);
+        // Ferme le DriverRestLog et démarre le repos. Enveloppé en try/catch :
+        // endDuty() lève une exception si aucun log ouvert n'existe (ex: départ
+        // arrivé sans être passé par "departed" avant le déploiement de cette
+        // fonctionnalité) — l'arrivée du départ ne doit jamais échouer pour ça.
+        if ($departure->driver_id && $departure->driver) {
+            try {
+                $this->restService->endDuty($departure->driver, $departure);
+            } catch (\Exception $e) {
+                Log::error('Échec endDuty', ['departure_id' => $departure->id, 'error' => $e->getMessage()]);
+            }
         }
     }
  

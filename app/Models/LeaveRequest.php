@@ -52,6 +52,12 @@ class LeaveRequest extends Model
         return $query->where('status', 'pending');
     }
 
+    public function scopeForEmployable($query, Model $employable)
+    {
+        return $query->where('employable_type', $employable::class)
+            ->where('employable_id', $employable->getKey());
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     /**

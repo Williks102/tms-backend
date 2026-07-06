@@ -159,6 +159,53 @@ class DepartureController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // GET /api/v1/planning/departures/mine/today — libre-service chauffeur
+    // ─────────────────────────────────────────────────────────────────────
+    public function myToday(Request $request): AnonymousResourceCollection|JsonResponse
+    {
+        $driver = $request->user()->driver;
+        abort_unless($driver, 403, 'Ce compte n\'est lié à aucun profil chauffeur');
+
+        $departures = Departure::with(['route', 'vehicle', 'gate'])
+            ->where('driver_id', $driver->id)
+            ->forDate(Carbon::today())
+            ->notCancelled()
+            ->orderBy('departure_datetime')
+            ->get();
+
+        return DepartureResource::collection($departures);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PATCH /api/v1/planning/departures/{departure}/my-status — libre-service
+    // chauffeur : uniquement SON propre départ, uniquement départ/arrivée
+    // (l'ouverture de l'embarquement et l'annulation restent manager/dispatcher)
+    // ─────────────────────────────────────────────────────────────────────
+    public function updateMyStatus(Request $request, Departure $departure): JsonResponse
+    {
+        $driver = $request->user()->driver;
+        abort_unless($driver, 403, 'Ce compte n\'est lié à aucun profil chauffeur');
+        abort_unless($departure->driver_id === $driver->id, 403, 'Ce départ ne vous est pas assigné');
+
+        $data = $request->validate([
+            'status'           => 'required|in:departed,arrived',
+            'actual_departure' => 'nullable|date|required_if:status,departed',
+            'actual_arrival'   => 'nullable|date|required_if:status,arrived',
+        ]);
+
+        try {
+            $departure = $this->departureService->updateStatus($departure, $data['status'], $data);
+
+            return response()->json([
+                'message'   => 'Statut mis à jour',
+                'departure' => new DepartureResource($departure),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // GET /api/v1/planning/vehicles/available?departure_datetime=&estimated_arrival=
     // ─────────────────────────────────────────────────────────────────────
     public function availableVehicles(Request $request): JsonResponse

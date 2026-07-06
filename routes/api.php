@@ -49,11 +49,16 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
         // IMPORTANT: routes nommées avant {departure}
         Route::get('departures/live',                    [DepartureController::class, 'live']);
+        Route::get('departures/mine/today',              [DepartureController::class, 'myToday'])->middleware('role:driver');
         Route::get('departures',                         [DepartureController::class, 'index']);
         Route::post('departures',                        [DepartureController::class, 'store'])->middleware('role:manager');
         Route::get('departures/{departure}',             [DepartureController::class, 'show']);
         Route::put('departures/{departure}',             [DepartureController::class, 'update'])->middleware('role:manager');
         Route::patch('departures/{departure}/status',    [DepartureController::class, 'updateStatus'])->middleware('role:manager');
+        // Libre-service chauffeur : SON propre départ uniquement, statuts departed/arrived
+        // uniquement (voir ownership check dans le contrôleur) — route distincte de
+        // celle du manager ci-dessus, pas une simple relaxation du middleware.
+        Route::patch('departures/{departure}/my-status', [DepartureController::class, 'updateMyStatus'])->middleware('role:driver');
         Route::delete('departures/{departure}',          [DepartureController::class, 'destroy'])->middleware('role:manager');
 
         Route::get('vehicles/available',                 [DepartureController::class, 'availableVehicles']);
@@ -97,6 +102,12 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/disciplinary',             [DisciplinaryRecordController::class, 'index']);
         Route::post('/disciplinary',            [DisciplinaryRecordController::class, 'store']);
     });
+
+    // Congé en libre-service — ouvert à tout utilisateur authentifié (auth:sanctum
+    // hérité du groupe v1 ci-dessus), volontairement hors du groupe role:manager,rh :
+    // chacun ne gère ici que SA PROPRE demande (employable = l'utilisateur connecté).
+    Route::get('/leaves/mine',  [LeaveRequestController::class, 'myLeaves']);
+    Route::post('/leaves/mine', [LeaveRequestController::class, 'storeMine']);
 
     // ── MODULE CHAUFFEURS ─────────────────────────────────────────────
     // RH gère uniquement les documents chauffeurs — le reste des écritures est réservé au Manager
@@ -164,6 +175,9 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/stats',                         [IncidentController::class, 'stats']);
         Route::get('/',                              [IncidentController::class, 'index']);
         Route::post('/',                             [IncidentController::class, 'store'])->middleware('role:manager,dispatcher');
+        // Libre-service chauffeur : driver_id forcé côté serveur, ne relâche pas
+        // le gate manager,dispatcher de la route ci-dessus.
+        Route::post('/mine',                         [IncidentController::class, 'storeMine'])->middleware('role:driver');
         Route::get('/{incident}',                    [IncidentController::class, 'show']);
         Route::patch('/{incident}/status',           [IncidentController::class, 'updateStatus'])->middleware('role:manager');
         Route::delete('/{incident}',                 [IncidentController::class, 'destroy'])->middleware('role:manager');

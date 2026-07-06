@@ -7,6 +7,7 @@ use App\Models\Driver;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Services\Hr\LeaveRequestService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -83,6 +84,46 @@ class LeaveRequestController extends Controller
             $leave = $this->service->reject($leave, $request->user()->id, $request->decision_notes);
 
             return response()->json(['message' => 'Congé refusé', 'leave' => $leave->load('employable')]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    // Un chauffeur agit en tant que son profil Driver (pas son compte User) —
+    // cohérent avec le fait que les infos contrat/congé RH sont déjà suivies
+    // sur le modèle Driver (voir migrations 2026_07_06_00000{2,3}).
+    private function employableFor(Request $request): Model
+    {
+        return $request->user()->driver ?? $request->user();
+    }
+
+    // GET /api/v1/leaves/mine — libre-service, ouvert à tout utilisateur authentifié
+    public function myLeaves(Request $request): JsonResponse
+    {
+        $leaves = LeaveRequest::forEmployable($this->employableFor($request))
+            ->latest('requested_at')
+            ->paginate($request->integer('per_page', 20));
+
+        return response()->json($leaves);
+    }
+
+    // POST /api/v1/leaves/mine — libre-service, ouvert à tout utilisateur authentifié
+    public function storeMine(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'type'       => 'required|in:conge_paye,maladie,sans_solde,autre',
+            'start_date' => 'required|date',
+            'end_date'   => 'required|date',
+            'reason'     => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $leave = $this->service->request($this->employableFor($request), $data);
+
+            return response()->json([
+                'message' => 'Demande de congé créée',
+                'leave'   => $leave,
+            ], 201);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

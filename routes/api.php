@@ -15,6 +15,7 @@ use App\Http\Controllers\Planning\RouteController;
 use App\Http\Controllers\Planning\ScheduleTemplateController;
 use App\Http\Controllers\Planning\StationController;
 use App\Http\Controllers\Tickets\TicketController;
+use App\Http\Controllers\Vehicles\VehicleController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Incidents\IncidentController;
 
@@ -63,6 +64,16 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('stations',                           [StationController::class, 'store'])->middleware('role:manager');
         Route::put('stations/{station}',                  [StationController::class, 'update'])->middleware('role:manager');
         Route::delete('stations/{station}',               [StationController::class, 'destroy'])->middleware('role:manager');
+    });
+
+    // ── MODULE VÉHICULES ──────────────────────────────────────────────
+    // Pas d'affectation permanente à un chauffeur — liaison avec Carburant/Maintenance/Incidents via vehicle_id
+    Route::prefix('vehicles')->group(function () {
+        Route::get('/',              [VehicleController::class, 'index']);
+        Route::post('/',             [VehicleController::class, 'store'])->middleware('role:manager');
+        Route::get('/{vehicle}',     [VehicleController::class, 'show']);
+        Route::put('/{vehicle}',     [VehicleController::class, 'update'])->middleware('role:manager');
+        Route::delete('/{vehicle}',  [VehicleController::class, 'destroy'])->middleware('role:manager');
     });
 
     // ── MODULE CHAUFFEURS ─────────────────────────────────────────────

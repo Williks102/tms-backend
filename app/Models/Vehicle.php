@@ -38,6 +38,31 @@ class Vehicle extends Model
         return $this->hasMany(Departure::class);
     }
 
+    public function maintenancePlans(): HasMany
+    {
+        return $this->hasMany(MaintenancePlan::class);
+    }
+
+    public function maintenanceRecords(): HasMany
+    {
+        return $this->hasMany(MaintenanceRecord::class);
+    }
+
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class);
+    }
+
+    public function fuelVouchers(): HasMany
+    {
+        return $this->hasMany(FuelVoucher::class);
+    }
+
+    public function fuelConsumptionLogs(): HasMany
+    {
+        return $this->hasMany(FuelConsumptionLog::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────
 
     public function scopeAvailable($query)

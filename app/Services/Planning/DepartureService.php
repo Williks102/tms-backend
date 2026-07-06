@@ -125,20 +125,45 @@ class DepartureService
     // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * Modifie un départ programmé : horaires, véhicule, chauffeur, quai, notes.
+     * Champs de planification — horaires prévus, véhicule, chauffeur, quai,
+     * places. Modifiables uniquement tant que le départ n'a pas encore eu
+     * lieu ("scheduled"), car ils impactent la disponibilité des ressources.
+     */
+    private const SCHEDULING_FIELDS = ['departure_datetime', 'estimated_arrival', 'vehicle_id', 'driver_id', 'boarding_gate_id', 'seats_available'];
+
+    /**
+     * Modifie un départ existant.
+     * - `notes`, `actual_departure`, `actual_arrival` : toujours modifiables
+     *   (correction a posteriori d'une heure réelle mal saisie ou oubliée).
+     * - horaires prévus / véhicule / chauffeur / quai / places : uniquement
+     *   tant que le départ est "scheduled" (impacte la disponibilité des
+     *   ressources, n'a plus de sens une fois le départ en cours ou terminé).
      * La ligne (route_id) n'est volontairement pas modifiable — un trajet
      * erroné doit être annulé et recréé (impacte tarifs/arrêts/billets déjà émis).
      *
-     * @throws \Exception si le départ n'est plus "scheduled", ou si le
+     * @throws \Exception si un champ de planification est modifié alors que
+     *                     le départ n'est plus "scheduled", ou si le
      *                     véhicule/chauffeur proposé n'est pas disponible
      */
     public function update(Departure $departure, array $data): Departure
     {
-        if ($departure->status !== 'scheduled') {
+        $wantsSchedulingChange = count(array_intersect(self::SCHEDULING_FIELDS, array_keys($data))) > 0;
+
+        if ($wantsSchedulingChange && $departure->status !== 'scheduled') {
             throw new \Exception("Modification impossible : ce départ est déjà {$departure->status}.");
         }
 
         return DB::transaction(function () use ($departure, $data) {
+            foreach (['actual_departure', 'actual_arrival'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $departure->update([$field => $data[$field] ? Carbon::parse($data[$field]) : null]);
+                }
+            }
+
+            if (array_key_exists('notes', $data)) {
+                $departure->update(['notes' => $data['notes']]);
+            }
+
             if (array_key_exists('departure_datetime', $data) || array_key_exists('estimated_arrival', $data)) {
                 $departureAt      = Carbon::parse($data['departure_datetime'] ?? $departure->departure_datetime);
                 $estimatedArrival = Carbon::parse($data['estimated_arrival'] ?? $departure->estimated_arrival);
@@ -160,7 +185,7 @@ class DepartureService
                 ]);
             }
 
-            foreach (['seats_available', 'notes', 'boarding_gate_id'] as $field) {
+            foreach (['seats_available', 'boarding_gate_id'] as $field) {
                 if (array_key_exists($field, $data)) {
                     $departure->update([$field => $data[$field]]);
                 }

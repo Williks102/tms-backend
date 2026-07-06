@@ -23,6 +23,8 @@ class UpdateDepartureRequest extends FormRequest
             'boarding_gate_id'   => 'nullable|exists:boarding_gates,id',
             'seats_available'    => 'nullable|integer|min:0',
             'notes'              => 'nullable|string|max:500',
+            'actual_departure'   => 'nullable|date',
+            'actual_arrival'     => 'nullable|date',
         ];
     }
 }

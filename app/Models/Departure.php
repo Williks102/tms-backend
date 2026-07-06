@@ -13,6 +13,13 @@ class Departure extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Ouverture de l'embarquement, fixée à X minutes avant departure_datetime.
+     * Purement indicatif — le passage au statut "boarding" reste une action
+     * manuelle du personnel (voir DepartureService::VALID_TRANSITIONS).
+     */
+    public const BOARDING_LEAD_MINUTES = 30;
+
     protected $fillable = [
         'route_id',
         'vehicle_id',
@@ -41,7 +48,7 @@ class Departure extends Model
     // mais reste attendu comme champ par le frontend — $appends le fait figurer
     // dans toArray()/toJson() même quand le modèle est sérialisé directement
     // (sans passer par DepartureResource), ex: Ticket::with('departure...').
-    protected $appends = ['boarding_gate'];
+    protected $appends = ['boarding_gate', 'boarding_time', 'boarding_due'];
 
     // ── Relations ────────────────────────────────────────────────────────
 
@@ -132,6 +139,31 @@ class Departure extends Model
     public function getBoardingGateAttribute(): ?string
     {
         return $this->gate?->gate_code;
+    }
+
+    /**
+     * Heure d'ouverture prévue de l'embarquement (departure_datetime - 30 min).
+     */
+    public function getBoardingTimeAttribute(): ?Carbon
+    {
+        return $this->departure_datetime?->copy()->subMinutes(self::BOARDING_LEAD_MINUTES);
+    }
+
+    /**
+     * True si l'heure d'embarquement prévue est passée mais que le départ
+     * est toujours "scheduled" — sert à alerter le personnel qu'il doit
+     * ouvrir l'embarquement manuellement (voir DepartureService::updateStatus).
+     */
+    public function isBoardingDue(): bool
+    {
+        return $this->status === 'scheduled'
+            && $this->boarding_time !== null
+            && $this->boarding_time->isPast();
+    }
+
+    public function getBoardingDueAttribute(): bool
+    {
+        return $this->isBoardingDue();
     }
 
     public function isCancelled(): bool

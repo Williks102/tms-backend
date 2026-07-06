@@ -46,6 +46,8 @@ class DepartureResource extends JsonResource
             'estimated_arrival'   => $this->estimated_arrival?->toIso8601String(),
             'actual_departure'    => $this->actual_departure?->toIso8601String(),
             'actual_arrival'      => $this->actual_arrival?->toIso8601String(),
+            'boarding_time'       => $this->boarding_time?->toIso8601String(),
+            'boarding_due'        => $this->boarding_due,
 
             // ── Infos opérationnelles ─────────────────────────────────
             'boarding_gate'       => $this->boarding_gate,

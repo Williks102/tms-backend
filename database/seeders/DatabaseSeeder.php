@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             FuelSeeder::class,           // 8. Bons carburant + consommations
             IncidentSeeder::class,       // 9. Incidents
             TicketSeeder::class,         // 10. Billets (guichet + en ligne)
+            HrSeeder::class,             // 11. Congés + disciplinaire + infos contrat
         ]);
 
         $this->command->info('✅ TMS seedé avec succès — données Côte d\'Ivoire');

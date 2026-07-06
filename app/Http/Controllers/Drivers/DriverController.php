@@ -183,4 +183,18 @@ class DriverController extends Controller
 
         return response()->json(['data' => $scores, 'month' => $month->format('Y-m')]);
     }
+
+    // GET /api/v1/drivers/documents/expiring?days=30
+    public function expiringDocuments(Request $request): JsonResponse
+    {
+        $days = $request->integer('days', 30);
+
+        $documents = DriverDocument::with('driver')
+            ->whereNotNull('expires_at')
+            ->whereDate('expires_at', '<=', now()->addDays($days))
+            ->orderBy('expires_at')
+            ->get();
+
+        return response()->json(['data' => $documents]);
+    }
 }

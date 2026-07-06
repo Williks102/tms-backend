@@ -8,11 +8,12 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'role'])]
+#[Fillable(['name', 'email', 'password', 'role', 'phone', 'hired_at', 'contract_type', 'contract_end_date', 'base_salary_fcfa'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -30,7 +31,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => Role::class,
+            'hired_at' => 'date',
+            'contract_end_date' => 'date',
+            'base_salary_fcfa' => 'decimal:2',
         ];
+    }
+
+    // ── Relations RH ─────────────────────────────────────────────────────
+
+    public function leaveRequests(): MorphMany
+    {
+        return $this->morphMany(LeaveRequest::class, 'employable');
+    }
+
+    public function disciplinaryRecords(): MorphMany
+    {
+        return $this->morphMany(DisciplinaryRecord::class, 'employable');
     }
 
     public function hasRole(Role|string $role): bool

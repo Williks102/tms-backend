@@ -14,6 +14,10 @@ use App\Http\Controllers\Planning\DepartureController;
 use App\Http\Controllers\Planning\RouteController;
 use App\Http\Controllers\Planning\ScheduleTemplateController;
 use App\Http\Controllers\Planning\StationController;
+use App\Http\Controllers\Hr\DisciplinaryRecordController;
+use App\Http\Controllers\Hr\EmployeeController;
+use App\Http\Controllers\Hr\HrDashboardController;
+use App\Http\Controllers\Hr\LeaveRequestController;
 use App\Http\Controllers\Tickets\TicketController;
 use App\Http\Controllers\Vehicles\VehicleController;
 use Illuminate\Support\Facades\Route;
@@ -77,6 +81,23 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{vehicle}',  [VehicleController::class, 'destroy'])->middleware('role:manager');
     });
 
+    // ── MODULE RH ─────────────────────────────────────────────────────
+    // Couvre tout le personnel (Users + Drivers) via relation polymorphe.
+    // Réservé à manager+rh — les salaires ne doivent être visibles par personne d'autre.
+    Route::prefix('hr')->middleware('role:manager,rh')->group(function () {
+        Route::get('/dashboard',                [HrDashboardController::class, 'index']);
+        Route::get('/employees',                [EmployeeController::class, 'index']);
+        Route::get('/employees/{type}/{id}',    [EmployeeController::class, 'show']);
+
+        Route::get('/leaves',                   [LeaveRequestController::class, 'index']);
+        Route::post('/leaves',                  [LeaveRequestController::class, 'store']);
+        Route::patch('/leaves/{leave}/approve', [LeaveRequestController::class, 'approve']);
+        Route::patch('/leaves/{leave}/reject',  [LeaveRequestController::class, 'reject']);
+
+        Route::get('/disciplinary',             [DisciplinaryRecordController::class, 'index']);
+        Route::post('/disciplinary',            [DisciplinaryRecordController::class, 'store']);
+    });
+
     // ── MODULE CHAUFFEURS ─────────────────────────────────────────────
     // RH gère uniquement les documents chauffeurs — le reste des écritures est réservé au Manager
     Route::prefix('drivers')->group(function () {
@@ -84,6 +105,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/',                                 [DriverController::class, 'store'])->middleware('role:manager');
         Route::get('/available',                         [DriverController::class, 'available']);
         Route::get('/scores/monthly',                    [DriverController::class, 'monthlyScores']);
+        // IMPORTANT: routes nommées avant {driver}
+        Route::get('/documents/expiring',                [DriverController::class, 'expiringDocuments']);
         Route::get('/{driver}',                          [DriverController::class, 'show']);
         Route::put('/{driver}',                          [DriverController::class, 'update'])->middleware('role:manager');
         Route::patch('/{driver}/status',                 [DriverController::class, 'updateStatus'])->middleware('role:manager');
@@ -95,7 +118,6 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/{driver}/scores/bonus',            [DriverController::class, 'assignBonus'])->middleware('role:manager');
         Route::post('/{driver}/documents',               [DriverController::class, 'uploadDocument'])->middleware('role:manager,rh');
         Route::get('/{driver}/documents/{document}/download', [DriverController::class, 'downloadDocument'])->middleware('role:manager,rh');
-        Route::get('/documents/expiring',                [DriverController::class, 'expiringDocuments']);
     });
 
     // ── MODULE CARBURANT & MAINTENANCE ────────────────────────────────

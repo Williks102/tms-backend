@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Driver extends Model
@@ -19,12 +20,15 @@ class Driver extends Model
         'license_number', 'license_category',
         'license_expires_at', 'medical_expires_at',
         'hired_at', 'status', 'user_id',
+        'contract_type', 'contract_end_date', 'base_salary_fcfa',
     ];
 
     protected $casts = [
         'license_expires_at' => 'date',
         'medical_expires_at' => 'date',
         'hired_at'           => 'date',
+        'contract_end_date'  => 'date',
+        'base_salary_fcfa'   => 'decimal:2',
     ];
 
     // ── Relations ──────────────────────────────────────────────────────
@@ -57,6 +61,16 @@ class Driver extends Model
     public function monthlyScores(): HasMany
     {
         return $this->hasMany(DriverMonthlyScore::class)->latest('month');
+    }
+
+    public function leaveRequests(): MorphMany
+    {
+        return $this->morphMany(LeaveRequest::class, 'employable');
+    }
+
+    public function disciplinaryRecords(): MorphMany
+    {
+        return $this->morphMany(DisciplinaryRecord::class, 'employable');
     }
 
     // ── Scopes ─────────────────────────────────────────────────────────

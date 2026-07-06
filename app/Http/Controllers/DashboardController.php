@@ -216,7 +216,15 @@ class DashboardController extends Controller
     private function liveDepartures(): \Illuminate\Support\Collection
     {
         return Departure::with(['route:id,code,name,origin_city,destination_city', 'vehicle:id,plate_number,model', 'driver:id,first_name,last_name', 'gate:id,gate_code'])
-            ->whereIn('status', ['boarding', 'departed'])
+            ->where(function ($query) {
+                $query->whereIn('status', ['boarding', 'departed'])
+                    // Programmés du jour aussi affichés — la légende de ce panneau
+                    // distingue déjà les 3 statuts (Programmé/Embarquement/En route).
+                    ->orWhere(function ($scheduled) {
+                        $scheduled->where('status', 'scheduled')
+                            ->whereDate('departure_datetime', today());
+                    });
+            })
             ->orderBy('departure_datetime')
             ->get()
             ->map(fn(Departure $d) => [
@@ -227,6 +235,8 @@ class DashboardController extends Controller
                 'driver'             => $d->driver?->fullName(),
                 'status'             => $d->status,
                 'boarding_gate'      => $d->boarding_gate,
+                'boarding_time'      => $d->boarding_time?->toIso8601String(),
+                'boarding_due'       => $d->boarding_due,
                 'departure_datetime' => $d->departure_datetime?->toIso8601String(),
                 'estimated_arrival'  => $d->estimated_arrival?->toIso8601String(),
                 'actual_departure'   => $d->actual_departure?->toIso8601String(),

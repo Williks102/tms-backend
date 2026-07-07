@@ -6,12 +6,15 @@ namespace App\Http\Controllers\Incidents;
 
 use App\Http\Controllers\Controller;
 use App\Models\Incident;
+use App\Models\IncidentMedia;
 use App\Models\IncidentQualityScore;
 use App\Services\Incidents\IncidentService;
 use App\Services\Incidents\QualityScoreService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class IncidentController extends Controller
 {

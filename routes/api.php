@@ -5,6 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BoardController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
@@ -31,6 +32,15 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 // Achat en ligne — endpoint public (simule la billetterie web/mobile, ex: ClicBillet).
 // Pas de middleware auth:sanctum : un client en ligne n'a pas de compte gestionnaire.
 Route::post('/v1/tickets/online', [TicketController::class, 'storeOnline'])->middleware('throttle:20,1');
+
+// Écran public "Départs / Arrivées" (panneau de gare) — pas de middleware
+// auth:sanctum : affiché sur un navigateur de gare sans compte utilisateur.
+// BoardDepartureResource filtre déjà les données personnelles (pas de
+// chauffeur, pas de notes) — ne jamais réutiliser DepartureResource ici.
+Route::prefix('v1/board')->middleware('throttle:120,1')->group(function () {
+    Route::get('live',     [BoardController::class, 'live']);
+    Route::get('stations', [BoardController::class, 'stations']);
+});
 
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 

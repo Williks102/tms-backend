@@ -5,9 +5,12 @@
 namespace App\Http\Controllers\Incidents;
 
 use App\Http\Controllers\Controller;
+use App\Models\Driver;
 use App\Models\Incident;
 use App\Models\IncidentMedia;
 use App\Models\IncidentQualityScore;
+use App\Models\Route;
+use App\Models\Vehicle;
 use App\Services\Incidents\IncidentService;
 use App\Services\Incidents\QualityScoreService;
 use Carbon\Carbon;
@@ -144,18 +147,91 @@ class IncidentController extends Controller
         return response()->json(['message' => 'Action enregistrée', 'action' => $action], 201);
     }
 
+    // POST /api/v1/incidents/{incident}/media
+    public function uploadMedia(Request $request, Incident $incident): JsonResponse
+    {
+        $data = $request->validate([
+            'file_type'   => 'required|in:photo,video,document,police_report',
+            'file'        => 'required|file|mimes:jpg,jpeg,png,mp4,pdf|max:10240', // 10 Mo
+            'description' => 'nullable|string|max:200',
+        ]);
+
+        // Stocké sur le disque privé ("local"), jamais servi directement par le
+        // webserver — même convention que les documents chauffeurs.
+        $path = $request->file('file')->store('incident-media', 'local');
+
+        $media = $incident->media()->create([
+            'file_path'   => $path,
+            'file_type'   => $data['file_type'],
+            'description' => $data['description'] ?? null,
+            'uploaded_by' => $request->user()->id,
+            'uploaded_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Média enregistré', 'media' => $media], 201);
+    }
+
+    // GET /api/v1/incidents/{incident}/media/{media}/download
+    public function downloadMedia(Incident $incident, IncidentMedia $media): StreamedResponse
+    {
+        abort_unless($media->incident_id === $incident->id, 404);
+        abort_unless(Storage::disk('local')->exists($media->file_path), 404);
+
+        return Storage::disk('local')->download($media->file_path);
+    }
+
     // GET /api/v1/incidents/quality/drivers
     public function qualityDrivers(Request $request): JsonResponse
     {
-        $month = Carbon::parse($request->get('month', now()->startOfMonth()));
+        return $this->qualityScores('driver', $request, fn($ids) => Driver::whereIn('id', $ids)->get()->keyBy('id'));
+    }
 
-        $scores = IncidentQualityScore::where('entity_type', 'driver')
+    // GET /api/v1/incidents/quality/vehicles
+    public function qualityVehicles(Request $request): JsonResponse
+    {
+        return $this->qualityScores('vehicle', $request, fn($ids) => Vehicle::whereIn('id', $ids)->get()->keyBy('id'));
+    }
+
+    // GET /api/v1/incidents/quality/routes — lignes accidentogènes
+    public function qualityRoutes(Request $request): JsonResponse
+    {
+        return $this->qualityScores('route', $request, fn($ids) => Route::whereIn('id', $ids)->get()->keyBy('id'));
+    }
+
+    // entity_type/entity_id sur IncidentQualityScore n'est pas un vrai morph
+    // Eloquent (juste un enum + un id brut) — impossible d'y attacher une
+    // relation ->with(). On recharge donc les entités à la main et on les
+    // rattache sous une clé nommée d'après le type (driver/vehicle/route).
+    private function qualityScores(string $entityType, Request $request, \Closure $loadEntities): JsonResponse
+    {
+        $month = Carbon::parse($request->get('month', now()->startOfMonth()))->startOfMonth();
+
+        $scores = IncidentQualityScore::where('entity_type', $entityType)
             ->where('month', $month->toDateString())
             ->orderByDesc('quality_score')
-            ->with('driver')
             ->get();
 
-        return response()->json(['month' => $month->format('Y-m'), 'data' => $scores]);
+        $entities = $loadEntities($scores->pluck('entity_id'));
+
+        $data = $scores->map(fn($score) => [
+            ...$score->toArray(),
+            $entityType => $entities->get($score->entity_id),
+        ]);
+
+        return response()->json(['month' => $month->format('Y-m'), 'data' => $data]);
+    }
+
+    // GET /api/v1/incidents/{incident}/actions
+    public function indexActions(Incident $incident): JsonResponse
+    {
+        return response()->json(['data' => $incident->actions()->with('takenBy')->get()]);
+    }
+
+    // DELETE /api/v1/incidents/{incident} — soft delete
+    public function destroy(Incident $incident): JsonResponse
+    {
+        $incident->delete();
+        return response()->json(['message' => 'Incident supprimé']);
     }
 
     // GET /api/v1/incidents/stats

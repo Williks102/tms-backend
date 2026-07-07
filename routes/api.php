@@ -184,6 +184,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/{incident}/actions',           [IncidentController::class, 'addAction'])->middleware('role:manager,dispatcher');
         Route::get('/{incident}/actions',            [IncidentController::class, 'indexActions']);
         Route::post('/{incident}/media',             [IncidentController::class, 'uploadMedia'])->middleware('role:manager,dispatcher');
+        Route::get('/{incident}/media/{media}/download', [IncidentController::class, 'downloadMedia']);
     });
 
     // ── MODULE BILLETTERIE ────────────────────────────────────────────

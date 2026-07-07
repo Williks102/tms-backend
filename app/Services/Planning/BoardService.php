@@ -35,6 +35,9 @@ class BoardService
                 'route',
                 fn ($q) => $q->where('destination_city', $station->city)
             ))
+            // "En route" (departed) d'abord — c'est l'info la plus utile pour
+            // un panneau de gare — puis "Arrivé", chaque groupe trié par heure.
+            ->orderByRaw("CASE WHEN status = 'departed' THEN 0 ELSE 1 END")
             ->orderBy('estimated_arrival')
             ->get();
 

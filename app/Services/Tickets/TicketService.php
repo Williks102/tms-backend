@@ -88,7 +88,10 @@ class TicketService
                 'destination_stop_id' => $destinationStop?->id,
                 'passenger_name'      => $data['passenger_name'],
                 'passenger_phone'     => $data['passenger_phone'] ?? null,
-                'seat_number'         => $data['seat_number'] ?? null,
+                // Premier arrivé, premier servi : si aucun siège n'est fourni
+                // explicitement (cas normal en achat en ligne — voir /billets),
+                // on attribue automatiquement le premier siège libre.
+                'seat_number'         => $data['seat_number'] ?? $this->assignSeat($departure),
                 'channel'             => $channel,
                 'payment_method'      => $data['payment_method'],
                 'price_fcfa'          => $data['price_fcfa'] ?? $defaultFare,
@@ -107,6 +110,39 @@ class TicketService
 
             return $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop', 'soldBy']);
         });
+    }
+
+    /**
+     * Premier siège libre (1..capacité du véhicule), dans l'ordre — "premier
+     * arrivé, premier servi". Appelée à l'intérieur de la transaction de
+     * issue(), après verrouillage du départ (lockForUpdate) : deux achats
+     * concurrents sur le même départ se sérialisent sur ce verrou, donc pas
+     * de risque que deux billets se voient attribuer le même siège.
+     * Retourne null si aucun véhicule n'est affecté (capacité inconnue) —
+     * le billet reste alors sans siège assigné, comme avant.
+     */
+    private function assignSeat(Departure $departure): ?string
+    {
+        $capacity = $departure->vehicle?->capacity;
+
+        if (!$capacity) {
+            return null;
+        }
+
+        $taken = Ticket::forDeparture($departure->id)
+            ->active()
+            ->whereNotNull('seat_number')
+            ->pluck('seat_number')
+            ->map(fn ($s) => (int) $s)
+            ->all();
+
+        for ($seat = 1; $seat <= $capacity; $seat++) {
+            if (!in_array($seat, $taken, true)) {
+                return (string) $seat;
+            }
+        }
+
+        return null; // improbable si hasAvailableSeats() est déjà passé, filet de sécurité
     }
 
     private const VALID_TRANSITIONS = [

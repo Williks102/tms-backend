@@ -59,6 +59,33 @@ class DriverController extends Controller
         ], 201);
     }
 
+    // PUT /api/v1/drivers/{driver}
+    // Profil général uniquement — le statut passe par updateStatus() ci-dessous,
+    // les dates d'expiration permis/visite médicale par uploadDocument() (voir
+    // le commentaire dans cette méthode), pas modifiables ici directement.
+    public function update(Request $request, Driver $driver): JsonResponse
+    {
+        $data = $request->validate([
+            'employee_number'   => 'sometimes|string|unique:drivers,employee_number,' . $driver->id,
+            'first_name'        => 'sometimes|string|max:100',
+            'last_name'         => 'sometimes|string|max:100',
+            'phone'             => 'sometimes|string|max:20',
+            'license_number'    => 'sometimes|string|unique:drivers,license_number,' . $driver->id,
+            'license_category'  => 'sometimes|string|max:10',
+            'hired_at'          => 'sometimes|date',
+            'contract_type'     => 'nullable|string|max:50',
+            'contract_end_date' => 'nullable|date',
+            'base_salary_fcfa'  => 'nullable|numeric|min:0',
+        ]);
+
+        $driver->update($data);
+
+        return response()->json([
+            'message' => 'Chauffeur mis à jour',
+            'driver'  => $driver->fresh(),
+        ]);
+    }
+
     public function updateStatus(Request $request, Driver $driver): JsonResponse
     {
         $data = $request->validate([
@@ -93,6 +120,17 @@ class DriverController extends Controller
             'expires_at'  => $data['expires_at'] ?? null,
             'uploaded_at' => now(),
         ]);
+
+        // Un document "license"/"medical" renouvelé fait aussi office de
+        // renouvellement de conformité : sans ça, RestComplianceService::canDrive()
+        // continuerait de bloquer le chauffeur sur l'ancienne date de
+        // drivers.license_expires_at/medical_expires_at, jamais mise à jour
+        // autrement (aucun autre endpoint ne le fait).
+        if ($data['type'] === 'license' && !empty($data['expires_at'])) {
+            $driver->update(['license_expires_at' => $data['expires_at']]);
+        } elseif ($data['type'] === 'medical' && !empty($data['expires_at'])) {
+            $driver->update(['medical_expires_at' => $data['expires_at']]);
+        }
 
         return response()->json([
             'message' => 'Document enregistré',

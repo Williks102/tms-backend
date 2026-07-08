@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Planning;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Planning\BulkUpdateDepartureStatusRequest;
 use App\Http\Requests\Planning\StoreDepartureRequest;
 use App\Http\Requests\Planning\UpdateDepartureRequest;
 use App\Http\Requests\Planning\UpdateDepartureStatusRequest;
@@ -138,6 +139,27 @@ class DepartureController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PATCH /api/v1/planning/departures/bulk-status
+    // ─────────────────────────────────────────────────────────────────────
+    public function bulkUpdateStatus(BulkUpdateDepartureStatusRequest $request): JsonResponse
+    {
+        $result = $this->departureService->bulkUpdateStatus(
+            $request->validated('departure_ids'),
+            $request->validated('status')
+        );
+
+        return response()->json([
+            'message'       => sprintf(
+                '%d départ(s) mis à jour%s',
+                count($result['updated']),
+                count($result['failed']) ? ', ' . count($result['failed']) . ' échec(s)' : ''
+            ),
+            'updated_ids' => $result['updated'],
+            'failed'      => $result['failed'],
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────────

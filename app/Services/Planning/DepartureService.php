@@ -241,6 +241,32 @@ class DepartureService
     }
 
     /**
+     * Applique le même changement de statut à plusieurs départs (ex: ouvrir
+     * l'embarquement pour une sélection de départs "scheduled" d'un coup).
+     * Chaque départ garde sa propre validation de transition — pas de
+     * tout-ou-rien : les échecs individuels (transition invalide, déjà modifié
+     * entre-temps...) sont rapportés sans bloquer les autres.
+     *
+     * @return array{updated: int[], failed: array<array{id: int, reason: string}>}
+     */
+    public function bulkUpdateStatus(array $departureIds, string $newStatus): array
+    {
+        $updated = [];
+        $failed  = [];
+
+        foreach (Departure::whereIn('id', $departureIds)->get() as $departure) {
+            try {
+                $this->updateStatus($departure, $newStatus);
+                $updated[] = $departure->id;
+            } catch (\Exception $e) {
+                $failed[] = ['id' => $departure->id, 'reason' => $e->getMessage()];
+            }
+        }
+
+        return ['updated' => $updated, 'failed' => $failed];
+    }
+
+    /**
      * Annule un départ.
      */
     public function cancel(Departure $departure, string $reason): Departure

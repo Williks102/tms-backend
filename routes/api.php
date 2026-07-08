@@ -60,6 +60,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         // IMPORTANT: routes nommées avant {departure}
         Route::get('departures/live',                    [DepartureController::class, 'live']);
         Route::get('departures/mine/today',              [DepartureController::class, 'myToday'])->middleware('role:driver');
+        Route::patch('departures/bulk-status',            [DepartureController::class, 'bulkUpdateStatus'])->middleware('role:manager');
         Route::get('departures',                         [DepartureController::class, 'index']);
         Route::post('departures',                        [DepartureController::class, 'store'])->middleware('role:manager');
         Route::get('departures/{departure}',             [DepartureController::class, 'show']);

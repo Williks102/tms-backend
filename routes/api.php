@@ -33,6 +33,13 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 // Pas de middleware auth:sanctum : un client en ligne n'a pas de compte gestionnaire.
 Route::post('/v1/tickets/online', [TicketController::class, 'storeOnline'])->middleware('throttle:20,1');
 
+// Parcours lignes/départs pour la page publique d'achat (/billets côté frontend)
+// — lecture seule, throttle plus généreux que l'achat lui-même.
+Route::prefix('v1/tickets/online')->middleware('throttle:60,1')->group(function () {
+    Route::get('routes',     [TicketController::class, 'publicRoutes']);
+    Route::get('departures', [TicketController::class, 'publicDepartures']);
+});
+
 // Écran public "Départs / Arrivées" (panneau de gare) — pas de middleware
 // auth:sanctum : affiché sur un navigateur de gare sans compte utilisateur.
 // BoardDepartureResource filtre déjà les données personnelles (pas de

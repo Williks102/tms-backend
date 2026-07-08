@@ -9,8 +9,10 @@ use App\Http\Requests\Tickets\StoreOnlineTicketRequest;
 use App\Http\Requests\Tickets\StoreTicketRequest;
 use App\Http\Requests\Tickets\UpdateTicketStatusRequest;
 use App\Models\Departure;
+use App\Models\Route;
 use App\Models\Ticket;
 use App\Services\Tickets\TicketService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -68,6 +70,66 @@ class TicketController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // GET /api/v1/tickets/online/routes — public (hors auth:sanctum), pour
+    // la page d'achat en ligne. Rien de sensible sur Route/RouteStop.
+    public function publicRoutes(): JsonResponse
+    {
+        $routes = Route::active()
+            ->with('stops')
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($route) => [
+                'id'                     => $route->id,
+                'code'                   => $route->code,
+                'name'                   => $route->name,
+                'origin_city'            => $route->origin_city,
+                'destination_city'       => $route->destination_city,
+                'distance_km'            => $route->distance_km,
+                'estimated_duration_min' => $route->estimated_duration_min,
+                'base_fare'              => $route->base_fare,
+                'is_dynamic'             => $route->is_dynamic,
+                'stops'                  => $route->is_dynamic
+                    ? $route->stops->map(fn ($s) => [
+                        'id'               => $s->id,
+                        'city_name'        => $s->city_name,
+                        'stop_order'       => $s->stop_order,
+                        'fare_from_origin' => $s->fare_from_origin,
+                    ])->values()
+                    : [],
+            ]);
+
+        return response()->json(['data' => $routes]);
+    }
+
+    // GET /api/v1/tickets/online/departures?route_id=&date= — public, départs
+    // encore ouverts à la vente (places restantes, pas encore partis/annulés).
+    public function publicDepartures(Request $request): JsonResponse
+    {
+        $request->validate([
+            'route_id' => 'required|integer|exists:routes,id',
+            'date'     => 'nullable|date',
+        ]);
+
+        $date = $request->filled('date') ? Carbon::parse($request->date) : Carbon::today();
+
+        $departures = Departure::where('route_id', $request->integer('route_id'))
+            ->notCancelled()
+            ->forDate($date)
+            ->whereIn('status', ['scheduled', 'boarding'])
+            ->where('seats_available', '>', 0)
+            ->orderBy('departure_datetime')
+            ->get()
+            ->map(fn (Departure $d) => [
+                'id'                 => $d->id,
+                'departure_datetime' => $d->departure_datetime?->toIso8601String(),
+                'estimated_arrival'  => $d->estimated_arrival?->toIso8601String(),
+                'seats_available'    => $d->seats_available,
+                'boarding_gate'      => $d->boarding_gate,
+            ]);
+
+        return response()->json(['data' => $departures]);
     }
 
     // GET /api/v1/tickets/{ticket}

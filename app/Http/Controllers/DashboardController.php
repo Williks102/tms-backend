@@ -9,6 +9,7 @@ use App\Models\Departure;
 use App\Models\Driver;
 use App\Models\FuelVoucher;
 use App\Models\SystemAlert;
+use App\Models\Ticket;
 use App\Models\Vehicle;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -205,12 +206,22 @@ class DashboardController extends Controller
         $pendingVouchers = FuelVoucher::where('status', 'pending')->count();
 
         return [
-            'fuel_cost_today_fcfa' => round($fuelCostToday),
-            'pending_vouchers'     => $pendingVouchers,
+            'fuel_cost_today_fcfa'    => round($fuelCostToday),
+            'pending_vouchers'        => $pendingVouchers,
             // revenue_today_fcfa: à connecter à l'API ClicBillet
             // Pour l'instant: estimation depuis départs × tarif moyen
-            'revenue_today_fcfa'   => $this->estimateRevenueToday(),
+            'revenue_today_fcfa'      => $this->estimateRevenueToday(),
+            // Vraie recette — somme des billets réellement vendus aujourd'hui
+            // (physique + en ligne), maintenant que la billetterie existe.
+            'revenue_real_today_fcfa' => $this->actualRevenueToday(),
         ];
+    }
+
+    private function actualRevenueToday(): float
+    {
+        return (float) Ticket::whereDate('purchased_at', today())
+            ->active()
+            ->sum('price_fcfa');
     }
 
     private function liveDepartures(): \Illuminate\Support\Collection

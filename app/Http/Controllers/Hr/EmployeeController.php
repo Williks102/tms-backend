@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Hr;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class EmployeeController extends Controller
 {
@@ -93,5 +95,110 @@ class EmployeeController extends Controller
         }
 
         abort(404, "Type d'employé inconnu: {$type}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /api/v1/hr/employees — créer un membre du personnel (manager, rh)
+    // Mot de passe généré aléatoirement, renvoyé UNE SEULE FOIS dans cette
+    // réponse — jamais stocké en clair, jamais renvoyé ailleurs ensuite.
+    // ─────────────────────────────────────────────────────────────────────
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name'              => 'required|string|max:150',
+            'email'             => 'required|email|unique:users,email',
+            'role'              => 'required|in:' . implode(',', array_column(Role::cases(), 'value')),
+            'phone'             => 'nullable|string|max:20',
+            'hired_at'          => 'nullable|date',
+            'contract_type'     => 'nullable|string|max:50',
+            'contract_end_date' => 'nullable|date',
+            'base_salary_fcfa'  => 'nullable|numeric|min:0',
+        ]);
+
+        $password = Str::password(12);
+
+        $user = User::create([...$data, 'password' => $password]);
+
+        return response()->json([
+            'message'            => 'Membre du personnel créé avec succès',
+            'user'               => $user,
+            'generated_password' => $password,
+        ], 201);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /api/v1/hr/employees/import — création en masse depuis un CSV
+    // (manager, rh). Colonnes attendues (en-tête) : name,email,role,phone,
+    // hired_at,contract_type,contract_end_date,base_salary_fcfa — seules
+    // name/email/role sont obligatoires. Chaque ligne est traitée
+    // indépendamment (pas de tout-ou-rien) : une ligne invalide est
+    // rapportée dans "failed" sans bloquer les autres.
+    // ─────────────────────────────────────────────────────────────────────
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate(['file' => 'required|file|mimes:csv,txt']);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        $header = array_map(fn ($h) => strtolower(trim($h)), fgetcsv($handle) ?: []);
+        $validRoles = array_column(Role::cases(), 'value');
+
+        $created = [];
+        $failed  = [];
+        $rowNum  = 1; // ligne 1 = en-tête
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNum++;
+            // array_pad seul ne raccourcit pas une ligne plus longue que
+            // l'en-tête (array_combine exigerait alors des tailles égales) —
+            // on tronque d'abord, puis on complète les colonnes manquantes.
+            $row     = array_pad(array_slice($row, 0, count($header)), count($header), null);
+            $rowData = array_combine($header, $row);
+            // Colonne absente de l'en-tête (CSV avec moins de colonnes que
+            // prévu) OU valeur vide → null, jamais une "undefined array key".
+            $col = fn (string $key) => (($rowData[$key] ?? null) !== null && $rowData[$key] !== '')
+                ? $rowData[$key] : null;
+
+            try {
+                $name  = trim((string) $col('name'));
+                $email = trim((string) $col('email'));
+                $role  = trim((string) $col('role'));
+
+                if (!$name || !$email || !$role) {
+                    throw new \Exception('Les colonnes name, email et role sont obligatoires');
+                }
+                if (!in_array($role, $validRoles, true)) {
+                    throw new \Exception("Rôle inconnu: {$role}");
+                }
+                if (User::where('email', $email)->exists()) {
+                    throw new \Exception("Email déjà utilisé: {$email}");
+                }
+
+                $password = Str::password(12);
+
+                $user = User::create([
+                    'name'              => $name,
+                    'email'             => $email,
+                    'role'              => $role,
+                    'password'          => $password,
+                    'phone'             => $col('phone'),
+                    'hired_at'          => $col('hired_at'),
+                    'contract_type'     => $col('contract_type'),
+                    'contract_end_date' => $col('contract_end_date'),
+                    'base_salary_fcfa'  => $col('base_salary_fcfa'),
+                ]);
+
+                $created[] = ['name' => $user->name, 'email' => $user->email, 'generated_password' => $password];
+            } catch (\Exception $e) {
+                $failed[] = ['row' => $rowNum, 'email' => $rowData['email'] ?? null, 'reason' => $e->getMessage()];
+            }
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'message' => count($created) . ' créé(s), ' . count($failed) . ' échec(s)',
+            'created' => $created,
+            'failed'  => $failed,
+        ]);
     }
 }

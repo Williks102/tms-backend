@@ -109,7 +109,10 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Réservé à manager+rh — les salaires ne doivent être visibles par personne d'autre.
     Route::prefix('hr')->middleware('role:manager,rh')->group(function () {
         Route::get('/dashboard',                [HrDashboardController::class, 'index']);
+        // IMPORTANT: routes nommées avant {type}/{id}
         Route::get('/employees',                [EmployeeController::class, 'index']);
+        Route::post('/employees',               [EmployeeController::class, 'store']);
+        Route::post('/employees/import',        [EmployeeController::class, 'import']);
         Route::get('/employees/{type}/{id}',    [EmployeeController::class, 'show']);
 
         Route::get('/leaves',                   [LeaveRequestController::class, 'index']);

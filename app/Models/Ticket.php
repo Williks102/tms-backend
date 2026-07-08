@@ -16,7 +16,7 @@ class Ticket extends Model
     protected $fillable = [
         'reference', 'departure_id', 'destination_stop_id', 'passenger_name', 'passenger_phone',
         'seat_number', 'channel', 'payment_method', 'price_fcfa', 'status',
-        'sold_by', 'purchased_at', 'boarded_at', 'cancellation_reason',
+        'sold_by', 'purchased_at', 'boarded_at', 'boarded_by', 'cancellation_reason',
     ];
 
     protected $casts = [
@@ -29,6 +29,7 @@ class Ticket extends Model
 
     public function departure(): BelongsTo      { return $this->belongsTo(Departure::class); }
     public function soldBy(): BelongsTo         { return $this->belongsTo(User::class, 'sold_by'); }
+    public function boardedBy(): BelongsTo      { return $this->belongsTo(User::class, 'boarded_by'); }
     public function destinationStop(): BelongsTo { return $this->belongsTo(RouteStop::class, 'destination_stop_id'); }
 
     // ── Scopes ─────────────────────────────────────────────────────────

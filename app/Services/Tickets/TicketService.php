@@ -153,7 +153,7 @@ class TicketService
         'refunded'  => [],
     ];
 
-    public function updateStatus(Ticket $ticket, string $newStatus, array $data = []): Ticket
+    public function updateStatus(Ticket $ticket, string $newStatus, array $data = [], ?int $actingUserId = null): Ticket
     {
         $allowed = self::VALID_TRANSITIONS[$ticket->status] ?? [];
 
@@ -164,7 +164,7 @@ class TicketService
             );
         }
 
-        return DB::transaction(function () use ($ticket, $newStatus, $data) {
+        return DB::transaction(function () use ($ticket, $newStatus, $data, $actingUserId) {
             $updates = ['status' => $newStatus];
 
             if ($newStatus === 'boarded') {
@@ -173,6 +173,9 @@ class TicketService
                     throw new \Exception("Embarquement impossible : le départ est {$departure->status}");
                 }
                 $updates['boarded_at'] = now();
+                // Qui a marqué l'embarquement — scan contrôleur ou bouton manuel
+                // manager/caissier dans le manifeste, les deux chemins passent ici.
+                $updates['boarded_by'] = $actingUserId;
             }
 
             if (in_array($newStatus, ['cancelled', 'refunded'])) {
@@ -190,5 +193,21 @@ class TicketService
 
             return $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop', 'soldBy']);
         });
+    }
+
+    /**
+     * Embarquement par scan (QR ou saisie manuelle de la référence) — résout
+     * le billet par référence plutôt que par id, puis réutilise la même
+     * validation de transition/statut du départ que updateStatus().
+     */
+    public function scanBoard(string $reference, int $actingUserId): Ticket
+    {
+        $ticket = Ticket::where('reference', $reference)->first();
+
+        if (!$ticket) {
+            throw new \Exception("Aucun billet trouvé pour la référence {$reference}");
+        }
+
+        return $this->updateStatus($ticket, 'boarded', [], $actingUserId);
     }
 }

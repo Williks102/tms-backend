@@ -206,9 +206,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     });
 
     // ── MODULE BILLETTERIE ────────────────────────────────────────────
-    // Caissier vend au guichet et gère l'embarquement — le reste réservé au Manager
+    // Caissier vend au guichet — embarquement désormais réservé au Contrôleur
+    // (scan, voir routes/scan ci-dessous) — le reste réservé au Manager
     Route::prefix('tickets')->group(function () {
+        // IMPORTANT: routes nommées avant {ticket}
         Route::get('/stats',                              [TicketController::class, 'stats']);
+        Route::get('/mine',                               [TicketController::class, 'mine'])->middleware('role:caissier');
+        Route::get('/scan/stats',                         [TicketController::class, 'scanStats'])->middleware('role:manager,controleur');
+        Route::post('/scan',                              [TicketController::class, 'scan'])->middleware('role:manager,controleur');
         Route::get('/departure/{departure}/manifest',      [TicketController::class, 'manifest']);
         Route::get('/',                                    [TicketController::class, 'index']);
         Route::post('/',                                   [TicketController::class, 'store'])->middleware('role:manager,caissier');

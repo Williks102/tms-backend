@@ -30,6 +30,7 @@ class TicketController extends Controller
         if ($request->filled('departure_id')) $query->where('departure_id', $request->departure_id);
         if ($request->filled('status'))       $query->where('status', $request->status);
         if ($request->filled('channel'))      $query->where('channel', $request->channel);
+        if ($request->filled('sold_by'))      $query->where('sold_by', $request->integer('sold_by'));
         if ($request->filled('search')) {
             $term = $request->string('search');
             $query->where(fn ($q) => $q
@@ -144,12 +145,65 @@ class TicketController extends Controller
     public function updateStatus(UpdateTicketStatusRequest $request, Ticket $ticket): JsonResponse
     {
         try {
-            $ticket = $this->ticketService->updateStatus($ticket, $request->validated('status'), $request->validated());
+            $ticket = $this->ticketService->updateStatus(
+                $ticket,
+                $request->validated('status'),
+                $request->validated(),
+                $request->user()->id
+            );
 
             return response()->json(['message' => 'Statut mis à jour', 'ticket' => $ticket]);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // GET /api/v1/tickets/mine — mes ventes du jour (caissier, libre-service)
+    public function mine(Request $request): JsonResponse
+    {
+        $date = $request->filled('date') ? Carbon::parse($request->date) : Carbon::today();
+
+        $tickets = Ticket::with(['departure.route', 'departure.gate', 'destinationStop'])
+            ->where('sold_by', $request->user()->id)
+            ->whereDate('purchased_at', $date)
+            ->latest('purchased_at')
+            ->get();
+
+        return response()->json([
+            'data'    => $tickets,
+            'summary' => [
+                'count'         => $tickets->count(),
+                'revenue_fcfa'  => (float) $tickets->where('status', '!=', 'cancelled')->sum('price_fcfa'),
+            ],
+        ]);
+    }
+
+    // POST /api/v1/tickets/scan — embarquement par scan QR ou saisie manuelle
+    // de la référence (contrôleur, manager)
+    public function scan(Request $request): JsonResponse
+    {
+        $request->validate(['reference' => 'required|string']);
+
+        try {
+            $ticket = $this->ticketService->scanBoard($request->string('reference'), $request->user()->id);
+
+            return response()->json([
+                'message' => "Billet {$ticket->reference} embarqué",
+                'ticket'  => $ticket,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    // GET /api/v1/tickets/scan/stats — statistiques d'embarquement du jour
+    public function scanStats(Request $request): JsonResponse
+    {
+        return response()->json([
+            'today_total'  => Ticket::where('status', 'boarded')->whereDate('boarded_at', today())->count(),
+            'today_by_me'  => Ticket::where('status', 'boarded')->whereDate('boarded_at', today())
+                ->where('boarded_by', $request->user()->id)->count(),
+        ]);
     }
 
     // GET /api/v1/tickets/departure/{departure}/manifest — liste d'embarquement

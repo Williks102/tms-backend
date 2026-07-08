@@ -3,6 +3,11 @@
 // ══════════════════════════════════════════════════════════════════════════
 // routes/api.php — ROUTES COMPLÈTES DES 3 MODULES
 // ══════════════════════════════════════════════════════════════════════════
+use App\Http\Controllers\Accounting\AccountController;
+use App\Http\Controllers\Accounting\CashVoucherController;
+use App\Http\Controllers\Accounting\JournalEntryController;
+use App\Http\Controllers\Accounting\PayrollController;
+use App\Http\Controllers\Accounting\ReportController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardController;
@@ -122,6 +127,36 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
         Route::get('/disciplinary',             [DisciplinaryRecordController::class, 'index']);
         Route::post('/disciplinary',            [DisciplinaryRecordController::class, 'store']);
+    });
+
+    // ── MODULE COMPTABILITÉ (OHADA / SYSCOHADA révisé) ─────────────────
+    // Même convention que le module RH : middleware de rôle unique sur tout
+    // le groupe, pas de sur-restriction route-par-route.
+    Route::prefix('comptabilite')->middleware('role:manager,rh,comptable')->group(function () {
+        Route::get('/accounts',                    [AccountController::class, 'index']);
+        Route::post('/accounts',                   [AccountController::class, 'store']);
+
+        // IMPORTANT: route nommée avant journals/{entry}
+        Route::post('/journals/manual',             [JournalEntryController::class, 'storeManual']);
+        Route::get('/journals',                     [JournalEntryController::class, 'index']);
+        Route::get('/journals/{entry}',              [JournalEntryController::class, 'show']);
+
+        Route::get('/grand-livre/{account}',         [ReportController::class, 'ledger']);
+        Route::get('/balance',                       [ReportController::class, 'balance']);
+        Route::get('/compte-resultat',               [ReportController::class, 'incomeStatement']);
+        Route::get('/bilan',                         [ReportController::class, 'balanceSheet']);
+
+        Route::get('/cash-vouchers',                 [CashVoucherController::class, 'index']);
+        Route::post('/cash-vouchers',                [CashVoucherController::class, 'store']);
+        Route::patch('/cash-vouchers/{voucher}/approve', [CashVoucherController::class, 'approve']);
+        Route::patch('/cash-vouchers/{voucher}/reject',  [CashVoucherController::class, 'reject']);
+
+        // IMPORTANT: route nommée avant payslips/{payslip}
+        Route::post('/payslips/generate',            [PayrollController::class, 'generate']);
+        Route::get('/payslips',                      [PayrollController::class, 'index']);
+        Route::put('/payslips/{payslip}/lines',      [PayrollController::class, 'updateLines']);
+        Route::patch('/payslips/{payslip}/validate', [PayrollController::class, 'validatePayslip']);
+        Route::patch('/payslips/{payslip}/pay',      [PayrollController::class, 'pay']);
     });
 
     // Congé en libre-service — ouvert à tout utilisateur authentifié (auth:sanctum

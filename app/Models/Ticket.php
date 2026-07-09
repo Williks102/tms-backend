@@ -15,14 +15,17 @@ class Ticket extends Model
 
     protected $fillable = [
         'reference', 'departure_id', 'destination_stop_id', 'passenger_name', 'passenger_phone',
-        'seat_number', 'channel', 'payment_method', 'price_fcfa', 'status',
-        'sold_by', 'purchased_at', 'boarded_at', 'boarded_by', 'cancellation_reason',
+        'passenger_email', 'seat_number', 'channel', 'payment_method', 'payment_channel',
+        'payment_token', 'payment_session_id', 'payment_confirmed_at', 'payment_expires_at',
+        'price_fcfa', 'status', 'sold_by', 'purchased_at', 'boarded_at', 'boarded_by', 'cancellation_reason',
     ];
 
     protected $casts = [
-        'price_fcfa'   => 'decimal:2',
-        'purchased_at' => 'datetime',
-        'boarded_at'   => 'datetime',
+        'price_fcfa'            => 'decimal:2',
+        'purchased_at'          => 'datetime',
+        'boarded_at'            => 'datetime',
+        'payment_confirmed_at'  => 'datetime',
+        'payment_expires_at'    => 'datetime',
     ];
 
     // ── Relations ──────────────────────────────────────────────────────

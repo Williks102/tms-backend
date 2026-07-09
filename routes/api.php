@@ -16,6 +16,7 @@ use App\Http\Controllers\Colis\ParcelController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MyPurchasesController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Payments\PaiementProWebhookController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
 use App\Http\Controllers\Fuel\MaintenancePlanController;
@@ -47,7 +48,16 @@ Route::post('/v1/tickets/online', [TicketController::class, 'storeOnline'])->mid
 Route::prefix('v1/tickets/online')->middleware('throttle:60,1')->group(function () {
     Route::get('routes',     [TicketController::class, 'publicRoutes']);
     Route::get('departures', [TicketController::class, 'publicDepartures']);
+    // /billets/retour interroge ce point après redirection PaiementPro —
+    // IMPORTANT: route nommée avant toute future {ticket} paramétrée sur ce préfixe.
+    Route::get('status',     [TicketController::class, 'onlineStatus']);
 });
+
+// Webhook PaiementPro (serveur-à-serveur, pas un navigateur) — voir
+// PaiementProWebhookController pour la stratégie de sécurisation en
+// l'absence de signature fournie par PaiementPro. Throttle généreux :
+// c'est un appel serveur légitime, pas un visiteur.
+Route::post('v1/payments/paiementpro/notify', [PaiementProWebhookController::class, 'handle'])->middleware('throttle:120,1');
 
 // Écran public "Départs / Arrivées" (panneau de gare) — pas de middleware
 // auth:sanctum : affiché sur un navigateur de gare sans compte utilisateur.

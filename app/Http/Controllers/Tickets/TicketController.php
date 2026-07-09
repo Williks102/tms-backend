@@ -59,18 +59,45 @@ class TicketController extends Controller
     }
 
     // POST /api/v1/tickets/online — achat en ligne (public, hors auth:sanctum)
+    // Crée un billet "pending" et retourne l'URL de paiement PaiementPro à
+    // laquelle rediriger le client — ne retourne JAMAIS un billet "paid" à
+    // cet appel, la confirmation vient uniquement du webhook (voir
+    // PaiementProWebhookController).
     public function storeOnline(StoreOnlineTicketRequest $request): JsonResponse
     {
         try {
-            $ticket = $this->ticketService->purchaseOnline($request->validated());
+            $result = $this->ticketService->purchaseOnline($request->validated());
 
             return response()->json([
-                'message' => "Billet {$ticket->reference} confirmé",
-                'ticket'  => $ticket,
+                'message'     => "Billet {$result['ticket']->reference} en attente de paiement",
+                'ticket'      => $result['ticket'],
+                'payment_url' => $result['payment_url'],
             ], 201);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // GET /api/v1/tickets/online/status?ref= — public, pour la page
+    // /billets/retour qui interroge ce point après redirection PaiementPro
+    // (la redirection navigateur n'est pas fiable seule : la confirmation
+    // serveur-à-serveur du webhook peut arriver avant ou après).
+    public function onlineStatus(Request $request): JsonResponse
+    {
+        $request->validate(['ref' => 'required|string']);
+
+        $ticket = Ticket::where('payment_token', $request->string('ref'))->first();
+
+        if (!$ticket) {
+            return response()->json(['status' => 'unknown'], 404);
+        }
+
+        return response()->json([
+            'status' => $ticket->status,
+            'ticket' => in_array($ticket->status, ['paid', 'boarded'], true)
+                ? $ticket->load(['departure.route', 'departure.gate', 'destinationStop'])
+                : null,
+        ]);
     }
 
     // GET /api/v1/tickets/online/routes — public (hors auth:sanctum), pour

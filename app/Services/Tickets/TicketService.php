@@ -9,14 +9,21 @@ use App\Models\RouteStop;
 use App\Models\Ticket;
 use App\Services\Audit\ActivityLogger;
 use App\Services\Fuel\AlertDispatcher;
+use App\Services\Payments\PaiementProService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class TicketService
 {
+    // Durée pendant laquelle un billet en ligne "pending" retient son siège
+    // en attendant la confirmation de paiement — voir ExpireOnlinePendingTickets.
+    private const PAYMENT_HOLD_MINUTES = 30;
+
     public function __construct(
         private readonly AlertDispatcher $alertDispatcher,
         private readonly ActivityLogger $activityLogger,
+        private readonly PaiementProService $paiementPro,
     ) {}
 
     /**
@@ -28,12 +35,74 @@ class TicketService
     }
 
     /**
-     * Achat en ligne — payé au moment de la requête (paiement déjà confirmé
-     * par la billetterie web/mobile qui appelle cet endpoint public).
+     * Achat en ligne — crée un billet "pending" (siège réservé, place
+     * décomptée) puis initialise une session de paiement PaiementPro. Le
+     * billet ne passe "paid" qu'à la confirmation par webhook (voir
+     * confirmOnlinePayment()) — jamais à cet appel, contrairement à l'ancien
+     * comportement qui simulait un paiement déjà validé.
+     *
+     * Si l'initialisation PaiementPro échoue (API indisponible, merchantId
+     * invalide...), le billet pending est immédiatement annulé pour libérer
+     * le siège plutôt que de laisser une réservation fantôme — le client
+     * n'a jamais reçu d'URL de paiement, il n'y a donc rien à laisser en
+     * attente.
+     *
+     * @return array{ticket: Ticket, payment_url: string}
      */
-    public function purchaseOnline(array $data): Ticket
+    public function purchaseOnline(array $data): array
     {
-        return $this->issue($data, channel: 'online', soldBy: null);
+        $ticket = $this->issue($data, channel: 'online', soldBy: null);
+
+        try {
+            $init = $this->paiementPro->initPayment($ticket, $data['payment_channel']);
+        } catch (\Throwable $e) {
+            $this->updateStatus($ticket, 'cancelled', [
+                'cancellation_reason' => 'Échec initialisation du paiement : ' . $e->getMessage(),
+            ]);
+
+            throw new \Exception('Impossible de démarrer le paiement pour le moment. Réessayez dans un instant.');
+        }
+
+        $ticket->update([
+            'payment_channel'    => $data['payment_channel'],
+            'payment_session_id' => $init['session_id'],
+        ]);
+
+        return ['ticket' => $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop']), 'payment_url' => $init['url']];
+    }
+
+    /**
+     * Confirme le paiement d'un billet en ligne suite à la notification
+     * PaiementPro (voir PaiementProWebhookController). Idempotent : un
+     * billet qui n'est plus "pending" (déjà payé ou déjà expiré/annulé)
+     * ne change pas de statut — évite un double crédit sur notification
+     * dupliquée, chose fréquente chez les passerelles de paiement qui
+     * retentent l'appel jusqu'à recevoir un 200.
+     */
+    public function confirmOnlinePayment(Ticket $ticket, array $rawPayload): Ticket
+    {
+        if ($ticket->status !== 'pending') {
+            Log::info('Notification PaiementPro ignorée — billet plus en attente', [
+                'reference' => $ticket->reference,
+                'status'    => $ticket->status,
+            ]);
+
+            return $ticket;
+        }
+
+        $ticket->update([
+            'status'               => 'paid',
+            'payment_confirmed_at' => now(),
+        ]);
+
+        $this->activityLogger->log(
+            'payment.confirmed',
+            $ticket,
+            "Paiement PaiementPro confirmé pour {$ticket->reference}",
+            metadata: ['raw_notification' => $rawPayload],
+        );
+
+        return $ticket->fresh(['departure.route', 'departure.gate', 'destinationStop']);
     }
 
     private function issue(array $data, string $channel, ?int $soldBy): Ticket
@@ -83,6 +152,7 @@ class TicketService
             $ref   = sprintf('TCK-%s-%06d', $year, $count);
 
             $defaultFare = $destinationStop?->fare_from_origin ?? $departure->route->base_fare;
+            $isOnline    = $channel === 'online';
 
             $ticket = Ticket::create([
                 'reference'           => $ref,
@@ -90,14 +160,25 @@ class TicketService
                 'destination_stop_id' => $destinationStop?->id,
                 'passenger_name'      => $data['passenger_name'],
                 'passenger_phone'     => $data['passenger_phone'] ?? null,
+                'passenger_email'     => $data['passenger_email'] ?? null,
                 // Premier arrivé, premier servi : si aucun siège n'est fourni
                 // explicitement (cas normal en achat en ligne — voir /billets),
                 // on attribue automatiquement le premier siège libre.
                 'seat_number'         => $data['seat_number'] ?? $this->assignSeat($departure),
                 'channel'             => $channel,
-                'payment_method'      => $data['payment_method'],
+                // Guichet : moyen fourni par le caissier (cash/mobile_money/card).
+                // En ligne : toujours 'online' — le détail de l'opérateur
+                // (CARD/OMCIV2/MOMOCI/WAVECI/MOOVCI) vit dans payment_channel.
+                'payment_method'      => $isOnline ? 'online' : $data['payment_method'],
+                // Référence opaque pour PaiementPro (pending uniquement) — jamais
+                // la référence publique, séquentielle et donc devinable.
+                'payment_token'       => $isOnline ? Str::random(40) : null,
+                'payment_expires_at'  => $isOnline ? now()->addMinutes(self::PAYMENT_HOLD_MINUTES) : null,
                 'price_fcfa'          => $data['price_fcfa'] ?? $defaultFare,
-                'status'              => 'paid',
+                // En ligne : reste "pending" jusqu'à confirmation webhook
+                // (voir confirmOnlinePayment()) — au guichet, payé immédiatement
+                // par le caissier au moment de la vente.
+                'status'              => $isOnline ? 'pending' : 'paid',
                 'sold_by'             => $soldBy,
                 'purchased_at'        => now(),
             ]);

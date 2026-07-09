@@ -2,6 +2,7 @@
 
 use App\Jobs\Drivers\AggregateMonthlyScores;
 use App\Jobs\Shared\CheckDocumentExpiry;
+use App\Jobs\Tickets\ExpireOnlinePendingTickets;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -19,3 +20,7 @@ Schedule::job(new CheckDocumentExpiry)->weekly();
 // Le 1er à 01h00, agrège le mois qui vient de se terminer — pas le mois en cours.
 Schedule::call(fn () => dispatch(new AggregateMonthlyScores(now()->subMonthNoOverflow())))
     ->monthlyOn(1, '01:00');
+
+// Libère les sièges retenus par des paiements en ligne jamais confirmés
+// (abandon, échec, webhook jamais reçu) — voir TicketService::PAYMENT_HOLD_MINUTES (30min).
+Schedule::job(new ExpireOnlinePendingTickets)->everyFiveMinutes();

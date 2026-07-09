@@ -26,18 +26,10 @@ class TicketObserver
             'channel'      => $ticket->channel,
         ]);
 
-        // Vente en ligne uniquement : aucun caissier n'est impliqué dans le
-        // flux (sold_by est null), le manager est donc le seul à devoir être
-        // notifié qu'une vente vient d'arriver. Une vente guichet n'a pas
-        // besoin de notification — le caissier vient de l'effectuer lui-même.
-        if ($ticket->channel === 'online') {
-            $this->notifyManagers(
-                'ticket.online_sale',
-                'Nouvelle vente en ligne',
-                "Billet {$ticket->reference} vendu en ligne — {$ticket->passenger_name}",
-            );
-        }
-
+        // Un billet en ligne naît "pending" (paiement pas encore confirmé,
+        // voir TicketService::purchaseOnline()) — pas de notification ni
+        // d'écriture comptable ici, ça serait annoncer une vente qui n'a pas
+        // encore eu lieu. Voir updated() pour la confirmation réelle.
         if ($ticket->status !== 'paid') {
             return;
         }
@@ -73,7 +65,48 @@ class TicketObserver
             'status'    => $ticket->status,
         ]);
 
+        // Confirmation de paiement en ligne (webhook PaiementPro, voir
+        // TicketService::confirmOnlinePayment()) — symétrique de la vente
+        // guichet dans created() : écriture comptable + notification manager,
+        // mais seulement maintenant que l'argent est réellement encaissé.
+        if ($ticket->status === 'paid' && $ticket->getOriginal('status') === 'pending') {
+            $this->notifyManagers(
+                'ticket.online_sale',
+                'Paiement en ligne confirmé',
+                "Billet {$ticket->reference} payé en ligne — {$ticket->passenger_name}",
+            );
+
+            try {
+                $this->accounting->post(
+                    journalCode: 'VE',
+                    label: "Vente billet {$ticket->reference}",
+                    lines: [
+                        ['account' => '571', 'debit' => (float) $ticket->price_fcfa],
+                        ['account' => '706', 'credit' => (float) $ticket->price_fcfa],
+                    ],
+                    source: $ticket,
+                    userId: $ticket->sold_by,
+                );
+            } catch (\Throwable $e) {
+                Log::error('Échec écriture comptable — paiement en ligne confirmé', [
+                    'reference' => $ticket->reference,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
+
+            return;
+        }
+
         if (!in_array($ticket->status, ['cancelled', 'refunded'], true)) {
+            return;
+        }
+
+        // Contre-passation uniquement si une vente avait réellement été
+        // enregistrée (le billet était "paid") — un billet en ligne jamais
+        // payé qui expire (pending → cancelled, voir
+        // ExpireOnlinePendingTickets) n'a JAMAIS eu d'écriture de vente,
+        // il n'y a donc rien à contre-passer.
+        if ($ticket->getOriginal('status') !== 'paid') {
             return;
         }
 

@@ -93,8 +93,9 @@ class DepartureService
         $vehicle = Vehicle::findOrFail($vehicleId);
 
         $departure->update([
-            'vehicle_id'      => $vehicleId,
-            'seats_available' => $vehicle->capacity,
+            'vehicle_id'         => $vehicleId,
+            'seats_available'    => $vehicle->capacity,
+            'cargo_capacity_kg'  => $vehicle->cargo_capacity_kg,
         ]);
 
         return $departure->fresh();

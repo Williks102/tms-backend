@@ -52,6 +52,8 @@ class DepartureResource extends JsonResource
             // ── Infos opérationnelles ─────────────────────────────────
             'boarding_gate'       => $this->boarding_gate,
             'seats_available'     => $this->seats_available,
+            'cargo_capacity_kg'   => $this->cargo_capacity_kg,
+            'cargo_used_kg'       => $this->cargo_used_kg,
             'status'              => $this->status,
 
             // ── Métriques calculées (disponibles après arrivée) ───────

@@ -47,6 +47,7 @@ class AccountingChartSeeder extends Seeder
             ['code' => '661',  'label' => 'Rémunérations directes versées au personnel',    'class' => 6, 'normal_side' => 'debit'],
             ['code' => '664',  'label' => 'Charges sociales',                               'class' => 6, 'normal_side' => 'debit'],
             ['code' => '706',  'label' => 'Services vendus — transport de voyageurs',       'class' => 7, 'normal_side' => 'credit'],
+            ['code' => '7071', 'label' => 'Prestations de service — fret/courrier',         'class' => 7, 'normal_side' => 'credit'],
             ['code' => '758',  'label' => 'Produits divers',                                'class' => 7, 'normal_side' => 'credit'],
         ];
 

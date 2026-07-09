@@ -12,18 +12,20 @@ enum Role: string
     case DRIVER     = 'driver';
     case CONTROLEUR = 'controleur';
     case COMPTABLE  = 'comptable';
+    case AGENT_COLIS = 'agent_colis';
 
     public function label(): string
     {
         return match ($this) {
-            self::DG         => 'Directeur Général',
-            self::MANAGER    => 'Manager',
-            self::DISPATCHER => 'Dispatcher',
-            self::RH         => 'RH',
-            self::CAISSIER   => 'Caissier',
-            self::DRIVER     => 'Chauffeur',
-            self::CONTROLEUR => 'Contrôleur',
-            self::COMPTABLE  => 'Comptable',
+            self::DG          => 'Directeur Général',
+            self::MANAGER     => 'Manager',
+            self::DISPATCHER  => 'Dispatcher',
+            self::RH          => 'RH',
+            self::CAISSIER    => 'Caissier',
+            self::DRIVER      => 'Chauffeur',
+            self::CONTROLEUR  => 'Contrôleur',
+            self::COMPTABLE   => 'Comptable',
+            self::AGENT_COLIS => 'Agent colis',
         };
     }
 }

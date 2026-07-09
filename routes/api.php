@@ -11,6 +11,7 @@ use App\Http\Controllers\Accounting\ReportController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardController;
+use App\Http\Controllers\Colis\ParcelController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
@@ -52,6 +53,13 @@ Route::prefix('v1/tickets/online')->middleware('throttle:60,1')->group(function 
 Route::prefix('v1/board')->middleware('throttle:120,1')->group(function () {
     Route::get('live',     [BoardController::class, 'live']);
     Route::get('stations', [BoardController::class, 'stations']);
+});
+
+// Suivi de colis — pas de middleware auth:sanctum : un client final n'a pas
+// de compte gestionnaire. ParcelTrackResource filtre déjà pickup_code et les
+// téléphones complets — ne jamais réutiliser le contrôleur authentifié ici.
+Route::prefix('v1/colis/track')->middleware('throttle:60,1')->group(function () {
+    Route::get('/{tracking_number}', [ParcelController::class, 'publicTrack']);
 });
 
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
@@ -157,6 +165,21 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::put('/payslips/{payslip}/lines',      [PayrollController::class, 'updateLines']);
         Route::patch('/payslips/{payslip}/validate', [PayrollController::class, 'validatePayslip']);
         Route::patch('/payslips/{payslip}/pay',      [PayrollController::class, 'pay']);
+    });
+
+    // ── MODULE COLIS (courrier / expédition) ───────────────────────────
+    Route::prefix('colis')->middleware('role:manager,agent_colis')->group(function () {
+        // IMPORTANT: routes nommées avant {parcel}
+        Route::post('/quote',                [ParcelController::class, 'quote']);
+        Route::post('/scan-arrival',         [ParcelController::class, 'scanArrival']);
+        Route::get('/',                      [ParcelController::class, 'index']);
+        Route::post('/',                     [ParcelController::class, 'store']);
+        Route::get('/{parcel}',              [ParcelController::class, 'show']);
+        Route::post('/{parcel}/release',     [ParcelController::class, 'release']);
+        Route::patch('/{parcel}/cancel',     [ParcelController::class, 'cancel']);
+        Route::patch('/{parcel}/exception',  [ParcelController::class, 'markException'])->middleware('role:manager');
+        Route::post('/{parcel}/media',       [ParcelController::class, 'uploadMedia']);
+        Route::get('/{parcel}/media/{media}/download', [ParcelController::class, 'downloadMedia']);
     });
 
     // Congé en libre-service — ouvert à tout utilisateur authentifié (auth:sanctum

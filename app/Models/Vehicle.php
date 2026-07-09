@@ -21,6 +21,7 @@ class Vehicle extends Model
         'maintenance_interval_km',
         'status',
         'notes',
+        'cargo_capacity_kg',
     ];
 
     protected $casts = [
@@ -29,6 +30,7 @@ class Vehicle extends Model
         'current_mileage_km'          => 'decimal:2',
         'last_maintenance_km'         => 'decimal:2',
         'maintenance_interval_km'     => 'decimal:2',
+        'cargo_capacity_kg'           => 'decimal:2',
     ];
 
     // ── Relations ────────────────────────────────────────────────────────

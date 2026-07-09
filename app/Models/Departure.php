@@ -34,6 +34,8 @@ class Departure extends Model
         'status',
         'cancellation_reason',
         'notes',
+        'cargo_capacity_kg',
+        'cargo_used_kg',
     ];
 
     protected $casts = [
@@ -42,6 +44,8 @@ class Departure extends Model
         'actual_departure'   => 'datetime',
         'actual_arrival'     => 'datetime',
         'seats_available'    => 'integer',
+        'cargo_capacity_kg'  => 'decimal:2',
+        'cargo_used_kg'      => 'decimal:2',
     ];
 
     // `boarding_gate` n'est plus une colonne (voir boarding_gate_id + gate())
@@ -89,6 +93,11 @@ class Departure extends Model
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    public function parcels(): HasMany
+    {
+        return $this->hasMany(Parcel::class);
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────

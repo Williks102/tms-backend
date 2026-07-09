@@ -46,6 +46,7 @@ class VehicleController extends Controller
             'maintenance_interval_km'    => 'nullable|numeric|min:0',
             'status'                     => 'nullable|in:available,on_trip,boarding,maintenance,inactive',
             'notes'                      => 'nullable|string',
+            'cargo_capacity_kg'          => 'nullable|numeric|min:0',
         ]);
 
         $vehicle = Vehicle::create($data);
@@ -89,6 +90,7 @@ class VehicleController extends Controller
             'maintenance_interval_km'    => 'numeric|min:0',
             'status'                     => 'in:available,on_trip,boarding,maintenance,inactive',
             'notes'                      => 'nullable|string',
+            'cargo_capacity_kg'          => 'nullable|numeric|min:0',
         ]);
 
         $vehicle->update($data);

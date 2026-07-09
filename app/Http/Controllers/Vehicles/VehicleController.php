@@ -4,11 +4,36 @@ namespace App\Http\Controllers\Vehicles;
 
 use App\Http\Controllers\Controller;
 use App\Models\Vehicle;
+use App\Models\VehicleDocument;
+use App\Services\Audit\ActivityLogger;
+use App\Services\Export\CsvExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class VehicleController extends Controller
 {
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly CsvExportService $csv,
+    ) {}
+
+    // GET /api/v1/vehicles/export
+    public function export(): StreamedResponse
+    {
+        $rows = Vehicle::all()->map(fn (Vehicle $v) => [
+            $v->plate_number, $v->model, $v->capacity, $v->status,
+            $v->current_mileage_km, $v->cargo_capacity_kg,
+            $v->insurance_expires_at?->toDateString(), $v->controle_technique_expires_at?->toDateString(),
+        ]);
+
+        return $this->csv->stream(
+            ['Plaque', 'Modèle', 'Capacité', 'Statut', 'Kilométrage', 'Capacité fret (kg)', 'Assurance expire', 'Contrôle technique expire'],
+            $rows,
+            'vehicules-' . now()->format('Y-m-d') . '.csv',
+        );
+    }
     // ─────────────────────────────────────────────────────────────────────
     // GET /api/v1/vehicles
     // ─────────────────────────────────────────────────────────────────────
@@ -67,6 +92,7 @@ class VehicleController extends Controller
             'maintenanceRecords'  => fn ($q) => $q->latest('performed_at')->limit(10),
             'incidents'           => fn ($q) => $q->latest('occurred_at')->limit(10),
             'fuelConsumptionLogs' => fn ($q) => $q->latest('recorded_at')->limit(10),
+            'documents',
         ]);
 
         return response()->json([
@@ -120,5 +146,61 @@ class VehicleController extends Controller
         $vehicle->delete();
 
         return response()->json(['message' => 'Véhicule désactivé avec succès']);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /api/v1/vehicles/{vehicle}/documents — copie du pattern
+    // DriverController::uploadDocument()
+    // ─────────────────────────────────────────────────────────────────────
+    public function uploadDocument(Request $request, Vehicle $vehicle): JsonResponse
+    {
+        $data = $request->validate([
+            'type'       => 'required|in:assurance,controle_technique,vignette,other',
+            'file'       => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'expires_at' => 'nullable|date',
+        ]);
+
+        // Stocké sur le disque privé ("local") — jamais servi directement par
+        // le webserver ; le nom de fichier est généré par Storage, jamais fourni par le client.
+        $path = $request->file('file')->store('vehicle-documents', 'local');
+
+        $document = VehicleDocument::create([
+            'vehicle_id'  => $vehicle->id,
+            'type'        => $data['type'],
+            'file_path'   => $path,
+            'expires_at'  => $data['expires_at'] ?? null,
+            'uploaded_at' => now(),
+        ]);
+
+        // Un document "assurance"/"controle_technique" renouvelé fait aussi
+        // office de mise en conformité — sans ça, isVehicleAvailable()
+        // continuerait de bloquer le véhicule sur l'ancienne date (voir
+        // Vehicle::hasExpiredDocuments(), même piège déjà rencontré côté chauffeurs).
+        if ($data['type'] === 'assurance' && !empty($data['expires_at'])) {
+            $vehicle->update(['insurance_expires_at' => $data['expires_at']]);
+        } elseif ($data['type'] === 'controle_technique' && !empty($data['expires_at'])) {
+            $vehicle->update(['controle_technique_expires_at' => $data['expires_at']]);
+        }
+
+        $this->activityLogger->log(
+            'vehicle_document.uploaded',
+            $vehicle,
+            "Document {$data['type']} ajouté pour {$vehicle->plate_number}",
+            userId: $request->user()->id,
+        );
+
+        return response()->json([
+            'message'  => 'Document enregistré',
+            'document' => $document,
+        ], 201);
+    }
+
+    // GET /api/v1/vehicles/{vehicle}/documents/{document}/download
+    public function downloadDocument(Vehicle $vehicle, VehicleDocument $document): StreamedResponse
+    {
+        abort_unless($document->vehicle_id === $vehicle->id, 404);
+        abort_unless(Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->download($document->file_path);
     }
 }

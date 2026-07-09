@@ -22,6 +22,8 @@ class Vehicle extends Model
         'status',
         'notes',
         'cargo_capacity_kg',
+        'insurance_expires_at',
+        'controle_technique_expires_at',
     ];
 
     protected $casts = [
@@ -31,6 +33,8 @@ class Vehicle extends Model
         'last_maintenance_km'         => 'decimal:2',
         'maintenance_interval_km'     => 'decimal:2',
         'cargo_capacity_kg'           => 'decimal:2',
+        'insurance_expires_at'          => 'date',
+        'controle_technique_expires_at' => 'date',
     ];
 
     // ── Relations ────────────────────────────────────────────────────────
@@ -65,6 +69,11 @@ class Vehicle extends Model
         return $this->hasMany(FuelConsumptionLog::class);
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(VehicleDocument::class);
+    }
+
     // ── Scopes ────────────────────────────────────────────────────────────
 
     public function scopeAvailable($query)
@@ -94,5 +103,17 @@ class Vehicle extends Model
     public function isAvailable(): bool
     {
         return $this->status === 'available';
+    }
+
+    /**
+     * Assurance ou contrôle technique expiré — même principe que
+     * Driver::hasExpiredDocuments(), vérifié via des colonnes dédiées
+     * (pas vehicle_documents.expires_at, qui peut contenir d'anciens
+     * documents remplacés depuis).
+     */
+    public function hasExpiredDocuments(): bool
+    {
+        return ($this->insurance_expires_at !== null && $this->insurance_expires_at->isPast())
+            || ($this->controle_technique_expires_at !== null && $this->controle_technique_expires_at->isPast());
     }
 }

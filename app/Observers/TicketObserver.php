@@ -4,14 +4,18 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Observers;
 
+use App\Enums\Role;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Services\Accounting\AccountingEntryService;
+use App\Services\Notifications\NotificationService;
 use Illuminate\Support\Facades\Log;
 
 class TicketObserver
 {
     public function __construct(
         private readonly AccountingEntryService $accounting,
+        private readonly NotificationService $notifications,
     ) {}
 
     public function created(Ticket $ticket): void
@@ -21,6 +25,18 @@ class TicketObserver
             'departure_id' => $ticket->departure_id,
             'channel'      => $ticket->channel,
         ]);
+
+        // Vente en ligne uniquement : aucun caissier n'est impliqué dans le
+        // flux (sold_by est null), le manager est donc le seul à devoir être
+        // notifié qu'une vente vient d'arriver. Une vente guichet n'a pas
+        // besoin de notification — le caissier vient de l'effectuer lui-même.
+        if ($ticket->channel === 'online') {
+            $this->notifyManagers(
+                'ticket.online_sale',
+                'Nouvelle vente en ligne',
+                "Billet {$ticket->reference} vendu en ligne — {$ticket->passenger_name}",
+            );
+        }
 
         if ($ticket->status !== 'paid') {
             return;
@@ -82,6 +98,15 @@ class TicketObserver
                 'reference' => $ticket->reference,
                 'error'     => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function notifyManagers(string $type, string $title, string $body): void
+    {
+        $managerIds = User::where('role', Role::MANAGER->value)->pluck('id')->all();
+
+        if ($managerIds) {
+            $this->notifications->notify($managerIds, $type, $title, $body);
         }
     }
 }

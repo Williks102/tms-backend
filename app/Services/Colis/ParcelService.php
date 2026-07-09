@@ -4,10 +4,14 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Services\Colis;
 
+use App\Enums\Role;
 use App\Models\Departure;
 use App\Models\Parcel;
+use App\Models\User;
 use App\Services\Accounting\AccountingEntryService;
+use App\Services\Audit\ActivityLogger;
 use App\Services\Fuel\AlertDispatcher;
+use App\Services\Notifications\NotificationService;
 use Illuminate\Support\Facades\DB;
 
 class ParcelService
@@ -16,6 +20,8 @@ class ParcelService
         private readonly ParcelPricingService $pricing,
         private readonly AccountingEntryService $accounting,
         private readonly AlertDispatcher $alertDispatcher,
+        private readonly NotificationService $notifications,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     /**
@@ -108,6 +114,23 @@ class ParcelService
 
         $parcel->update(['status' => 'arrive', 'arrived_at' => now()]);
 
+        // Notifie l'agent qui a enregistré le colis (confirmation qu'il est
+        // bien arrivé) + les managers (supervision) — pas de notification
+        // client possible ici, aucun canal SMS/email n'est branché (voir
+        // NotificationService/LogChannel).
+        $recipientIds = array_unique(array_filter([
+            $parcel->registered_by,
+            ...User::where('role', Role::MANAGER->value)->pluck('id')->all(),
+        ]));
+        if ($recipientIds) {
+            $this->notifications->notify(
+                $recipientIds,
+                'parcel.arrived',
+                'Colis arrivé',
+                "Colis {$parcel->tracking_number} arrivé — prêt pour le retrait ({$parcel->recipient_name})",
+            );
+        }
+
         return $parcel->fresh();
     }
 
@@ -196,7 +219,7 @@ class ParcelService
      *
      * @throws \RuntimeException si le statut cible n'est pas une exception valide
      */
-    public function markException(Parcel $parcel, string $status, string $reason): Parcel
+    public function markException(Parcel $parcel, string $status, string $reason, ?int $userId = null): Parcel
     {
         if (!in_array($status, ['retourne', 'perdu'], true)) {
             throw new \RuntimeException("Statut d'exception invalide");
@@ -207,6 +230,13 @@ class ParcelService
             'exception_reason' => $reason,
             'returned_at'      => $status === 'retourne' ? now() : $parcel->returned_at,
         ]);
+
+        $this->activityLogger->log(
+            'parcel.exception',
+            $parcel,
+            "Colis {$parcel->tracking_number} marqué {$status} — {$reason}",
+            userId: $userId,
+        );
 
         return $parcel->fresh();
     }

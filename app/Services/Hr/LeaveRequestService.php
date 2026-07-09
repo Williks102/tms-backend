@@ -4,11 +4,18 @@ namespace App\Services\Hr;
 
 use App\Models\Driver;
 use App\Models\LeaveRequest;
+use App\Models\User;
+use App\Services\Audit\ActivityLogger;
+use App\Services\Notifications\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class LeaveRequestService
 {
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly ActivityLogger $activityLogger,
+    ) {}
     /**
      * Crée une demande de congé pour un employé (User ou Driver).
      *
@@ -74,6 +81,9 @@ class LeaveRequestService
             $employable->update(['status' => 'on_leave']);
         }
 
+        $this->notifyEmployable($employable, 'leave.approved', 'Congé approuvé', "Votre demande de congé du {$leave->start_date->format('d/m/Y')} au {$leave->end_date->format('d/m/Y')} a été approuvée.");
+        $this->activityLogger->log('leave.approved', $leave, "Congé #{$leave->id} approuvé", userId: $decidedBy);
+
         return $leave;
     }
 
@@ -95,6 +105,24 @@ class LeaveRequestService
             'decision_notes' => $notes,
         ]);
 
-        return $leave->fresh();
+        $leave = $leave->fresh();
+        $this->notifyEmployable($leave->employable, 'leave.rejected', 'Congé refusé', "Votre demande de congé du {$leave->start_date->format('d/m/Y')} au {$leave->end_date->format('d/m/Y')} a été refusée : {$notes}");
+        $this->activityLogger->log('leave.rejected', $leave, "Congé #{$leave->id} refusé — {$notes}", userId: $decidedBy);
+
+        return $leave;
+    }
+
+    /**
+     * Notifie l'employé de la décision — un `User` directement, un `Driver`
+     * seulement s'il a un compte de connexion lié (drivers.user_id, voir
+     * portail chauffeur libre-service). Silencieux sinon (pas de compte à notifier).
+     */
+    private function notifyEmployable(Model $employable, string $type, string $title, string $body): void
+    {
+        $userId = $employable instanceof User ? $employable->id : $employable->user_id;
+
+        if ($userId) {
+            $this->notifications->notify($userId, $type, $title, $body);
+        }
     }
 }

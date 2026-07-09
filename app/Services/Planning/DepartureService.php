@@ -5,6 +5,7 @@ namespace App\Services\Planning;
 use App\Models\Departure;
 use App\Models\Driver;
 use App\Models\Vehicle;
+use App\Services\Audit\ActivityLogger;
 use App\Services\Drivers\RestComplianceService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,7 @@ class DepartureService
     public function __construct(
         private readonly GateAssignmentService $gateService,
         private readonly RestComplianceService $restService,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────
@@ -221,7 +223,7 @@ class DepartureService
      *
      * @throws \Exception si transition non autorisée ou données manquantes
      */
-    public function updateStatus(Departure $departure, string $newStatus, array $data = []): Departure
+    public function updateStatus(Departure $departure, string $newStatus, array $data = [], ?int $userId = null): Departure
     {
         $this->validateStatusTransition($departure->status, $newStatus);
 
@@ -237,8 +239,21 @@ class DepartureService
         };
 
         $departure->update($updates);
+        $departure = $departure->fresh();
 
-        return $departure->fresh();
+        // Seule l'annulation est tracée dans la piste d'audit — les autres
+        // transitions (boarding/departed/arrived) sont du flux opérationnel
+        // routinier, pas des actions à forte sensibilité.
+        if ($newStatus === 'cancelled') {
+            $this->activityLogger->log(
+                'departure.cancelled',
+                $departure,
+                "Départ #{$departure->id} annulé: {$departure->cancellation_reason}",
+                userId: $userId,
+            );
+        }
+
+        return $departure;
     }
 
     /**
@@ -310,6 +325,22 @@ class DepartureService
             return [
                 'available' => false,
                 'reason'    => "Véhicule en statut: {$vehicle->status}",
+            ];
+        }
+
+        // Vérifie les documents obligatoires (assurance, contrôle technique)
+        // — même principe que RestComplianceService::canDrive() pour les
+        // chauffeurs, via les colonnes dédiées vehicle.insurance_expires_at/
+        // controle_technique_expires_at (pas vehicle_documents directement,
+        // voir Vehicle::hasExpiredDocuments()). La vignette ne bloque pas.
+        if ($vehicle->hasExpiredDocuments()) {
+            $reason = $vehicle->insurance_expires_at?->isPast()
+                ? "assurance expirée le {$vehicle->insurance_expires_at->format('d/m/Y')}"
+                : "contrôle technique expiré le {$vehicle->controle_technique_expires_at->format('d/m/Y')}";
+
+            return [
+                'available' => false,
+                'reason'    => "Document expiré: {$reason}",
             ];
         }
 

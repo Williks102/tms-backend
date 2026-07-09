@@ -107,6 +107,23 @@ class FuelVoucherController extends Controller
         return response()->json(['message' => 'Bon refusé', 'voucher' => $voucher]);
     }
 
+    // GET /api/v1/fuel/consumption — liste générale, filtrable. `mine=1` sert
+    // la vue "mes saisies" du dispatcher (reported_by/recorded_by = lui,
+    // jamais un id arbitraire fourni par le client — même sécurité que les
+    // routes /mine déjà en place ailleurs). Les bons carburant (FuelVoucher)
+    // n'ont aucune colonne de ce type — seule la consommation réelle enregistrée
+    // par le dispatcher est traçable jusqu'à son auteur.
+    public function consumptionIndex(Request $request): JsonResponse
+    {
+        $logs = FuelConsumptionLog::with(['vehicle', 'departure.route'])
+            ->when($request->boolean('mine'), fn ($q) => $q->where('recorded_by', $request->user()->id))
+            ->when($request->filled('vehicle_id'), fn ($q) => $q->where('vehicle_id', $request->vehicle_id))
+            ->latest('recorded_at')
+            ->paginate($request->integer('per_page', 20));
+
+        return response()->json($logs);
+    }
+
     // POST /api/v1/fuel/consumption
     public function recordConsumption(Request $request): JsonResponse
     {

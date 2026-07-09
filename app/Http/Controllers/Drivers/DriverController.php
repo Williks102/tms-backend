@@ -7,8 +7,10 @@ namespace App\Http\Controllers\Drivers;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\DriverDocument;
+use App\Services\Audit\ActivityLogger;
 use App\Services\Drivers\RestComplianceService;
 use App\Services\Drivers\EcoScoreService;
+use App\Services\Export\CsvExportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +22,25 @@ class DriverController extends Controller
     public function __construct(
         private readonly RestComplianceService $restService,
         private readonly EcoScoreService $ecoService,
+        private readonly ActivityLogger $activityLogger,
+        private readonly CsvExportService $csv,
     ) {}
+
+    // GET /api/v1/drivers/export
+    public function export(): StreamedResponse
+    {
+        $rows = Driver::all()->map(fn (Driver $d) => [
+            $d->employee_number, $d->first_name, $d->last_name, $d->phone,
+            $d->license_number, $d->status,
+            $d->license_expires_at?->toDateString(), $d->medical_expires_at?->toDateString(),
+        ]);
+
+        return $this->csv->stream(
+            ['Matricule', 'Prénom', 'Nom', 'Téléphone', 'N° Permis', 'Statut', 'Permis expire', 'Visite médicale expire'],
+            $rows,
+            'chauffeurs-' . now()->format('Y-m-d') . '.csv',
+        );
+    }
 
     // GET /api/v1/drivers
     public function index(Request $request): JsonResponse
@@ -132,6 +152,13 @@ class DriverController extends Controller
             $driver->update(['medical_expires_at' => $data['expires_at']]);
         }
 
+        $this->activityLogger->log(
+            'driver_document.uploaded',
+            $driver,
+            "Document {$data['type']} ajouté pour {$driver->first_name} {$driver->last_name}",
+            userId: $request->user()->id,
+        );
+
         return response()->json([
             'message' => 'Document enregistré',
             'document' => $document,
@@ -205,6 +232,28 @@ class DriverController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // GET /api/v1/drivers/{driver}/scores — historique éco-score/qualité
+    // d'un chauffeur (route déjà déclarée dans routes/api.php mais jusque-là
+    // sans méthode correspondante — 500 garanti si jamais appelée).
+    public function scores(Driver $driver): JsonResponse
+    {
+        $scores = \App\Models\DriverMonthlyScore::where('driver_id', $driver->id)
+            ->orderByDesc('month')
+            ->limit(12)
+            ->get();
+
+        return response()->json(['data' => $scores]);
+    }
+
+    // GET /api/v1/drivers/mine/scores — libre-service, chauffeur connecté uniquement
+    public function myScores(Request $request): JsonResponse
+    {
+        $driver = $request->user()->driver;
+        abort_unless($driver, 403, "Ce compte n'est lié à aucun profil chauffeur");
+
+        return $this->scores($driver);
     }
 
     // GET /api/v1/drivers/scores/monthly

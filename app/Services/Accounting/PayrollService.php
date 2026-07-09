@@ -7,12 +7,19 @@ namespace App\Services\Accounting;
 use App\Models\Accounting\Payslip;
 use App\Models\Accounting\PayslipLine;
 use App\Models\Driver;
+use App\Models\DriverMonthlyScore;
 use App\Models\User;
+use App\Services\Audit\ActivityLogger;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PayrollService
 {
+    // Illustratif — à ajuster, même esprit que ParcelPricingService::RATE_PER_KG_FCFA.
+    private const COMMISSION_PER_TRIP_FCFA = 500;
+
     public function __construct(
+        private readonly ActivityLogger $activityLogger,
         private readonly AccountingEntryService $accounting,
     ) {}
 
@@ -56,6 +63,26 @@ class PayrollService
                 'label'       => 'Salaire de base',
                 'amount_fcfa' => $employable->base_salary_fcfa,
             ]);
+
+            // Commission trajets — chauffeurs uniquement, seulement si un
+            // score mensuel existe déjà pour la période (pas de trajets
+            // connus = pas de commission inventée). Reste éditable/
+            // supprimable par le comptable avant validation comme toute ligne.
+            if ($employable instanceof Driver) {
+                $monthDate = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+                $score = DriverMonthlyScore::where('driver_id', $employable->id)
+                    ->where('month', $monthDate->toDateString())
+                    ->first();
+
+                if ($score && $score->trips_count > 0) {
+                    PayslipLine::create([
+                        'payslip_id'  => $payslip->id,
+                        'type'        => 'gain',
+                        'label'       => "Commission trajets ({$score->trips_count} trajets)",
+                        'amount_fcfa' => $score->trips_count * self::COMMISSION_PER_TRIP_FCFA,
+                    ]);
+                }
+            }
 
             $this->recalculate($payslip);
             $created++;
@@ -158,6 +185,13 @@ class PayrollService
             'validation_entry_id' => $entry->id,
         ]);
 
+        $this->activityLogger->log(
+            'payslip.validated',
+            $payslip,
+            "Bulletin de paie #{$payslip->id} ({$payslip->period}) validé — brut {$gross} FCFA",
+            userId: $userId,
+        );
+
         return $payslip->fresh(['lines.account', 'validationEntry.lines']);
     }
 
@@ -191,6 +225,13 @@ class PayrollService
             'paid_at'          => now(),
             'payment_entry_id' => $entry->id,
         ]);
+
+        $this->activityLogger->log(
+            'payslip.paid',
+            $payslip,
+            "Bulletin de paie #{$payslip->id} ({$payslip->period}) payé — net {$net} FCFA",
+            userId: $userId,
+        );
 
         return $payslip->fresh(['paymentEntry.lines']);
     }

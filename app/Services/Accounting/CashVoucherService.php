@@ -5,11 +5,13 @@
 namespace App\Services\Accounting;
 
 use App\Models\Accounting\CashVoucher;
+use App\Services\Audit\ActivityLogger;
 
 class CashVoucherService
 {
     public function __construct(
         private readonly AccountingEntryService $accounting,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     public function request(array $data, int $requestedBy): CashVoucher
@@ -61,6 +63,13 @@ class CashVoucherService
             'accounting_entry_id'  => $entry->id,
         ]);
 
+        $this->activityLogger->log(
+            'cash_voucher.approved',
+            $voucher,
+            "Bon {$voucher->reference} approuvé — {$amount} FCFA",
+            userId: $approvedBy,
+        );
+
         return $voucher->fresh(['account', 'accountingEntry.lines']);
     }
 
@@ -79,6 +88,13 @@ class CashVoucherService
             'approved_at'      => now(),
             'rejection_reason' => $reason,
         ]);
+
+        $this->activityLogger->log(
+            'cash_voucher.rejected',
+            $voucher,
+            "Bon {$voucher->reference} refusé — {$reason}",
+            userId: $approvedBy,
+        );
 
         return $voucher->fresh();
     }

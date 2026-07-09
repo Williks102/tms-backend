@@ -127,7 +127,8 @@ class DepartureController extends Controller
             $departure = $this->departureService->updateStatus(
                 $departure,
                 $request->validated('status'),
-                $request->validated()
+                $request->validated(),
+                $request->user()->id,
             );
 
             return response()->json([

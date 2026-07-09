@@ -8,11 +8,14 @@ use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\PayrollController;
 use App\Http\Controllers\Accounting\ReportController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\Colis\ParcelController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MyPurchasesController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
 use App\Http\Controllers\Fuel\MaintenancePlanController;
@@ -61,6 +64,10 @@ Route::prefix('v1/board')->middleware('throttle:120,1')->group(function () {
 Route::prefix('v1/colis/track')->middleware('throttle:60,1')->group(function () {
     Route::get('/{tracking_number}', [ParcelController::class, 'publicTrack']);
 });
+
+// Compte client léger (billets + colis) — pas de mot de passe, le numéro de
+// téléphone est le seul "secret", même principe que /colis/track ci-dessus.
+Route::get('v1/mes-achats', [MyPurchasesController::class, 'index'])->middleware('throttle:20,1');
 
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
@@ -112,9 +119,13 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::prefix('vehicles')->group(function () {
         Route::get('/',              [VehicleController::class, 'index']);
         Route::post('/',             [VehicleController::class, 'store'])->middleware('role:manager');
+        // IMPORTANT: route nommée avant {vehicle}
+        Route::get('/export',        [VehicleController::class, 'export'])->middleware('role:manager,dispatcher');
         Route::get('/{vehicle}',     [VehicleController::class, 'show']);
         Route::put('/{vehicle}',     [VehicleController::class, 'update'])->middleware('role:manager');
         Route::delete('/{vehicle}',  [VehicleController::class, 'destroy'])->middleware('role:manager');
+        Route::post('/{vehicle}/documents',               [VehicleController::class, 'uploadDocument'])->middleware('role:manager');
+        Route::get('/{vehicle}/documents/{document}/download', [VehicleController::class, 'downloadDocument'])->middleware('role:manager');
     });
 
     // ── MODULE RH ─────────────────────────────────────────────────────
@@ -126,6 +137,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/employees',                [EmployeeController::class, 'index']);
         Route::post('/employees',               [EmployeeController::class, 'store']);
         Route::post('/employees/import',        [EmployeeController::class, 'import']);
+        Route::get('/employees/export',         [EmployeeController::class, 'export']);
         Route::get('/employees/{type}/{id}',    [EmployeeController::class, 'show']);
 
         Route::get('/leaves',                   [LeaveRequestController::class, 'index']);
@@ -151,6 +163,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 
         Route::get('/grand-livre/{account}',         [ReportController::class, 'ledger']);
         Route::get('/balance',                       [ReportController::class, 'balance']);
+        Route::get('/balance/export',                [ReportController::class, 'exportBalance']);
         Route::get('/compte-resultat',               [ReportController::class, 'incomeStatement']);
         Route::get('/bilan',                         [ReportController::class, 'balanceSheet']);
 
@@ -188,6 +201,22 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/leaves/mine',  [LeaveRequestController::class, 'myLeaves']);
     Route::post('/leaves/mine', [LeaveRequestController::class, 'storeMine']);
 
+    // Idem pour les bulletins de paie — libre-service chauffeur, hors du
+    // groupe role:manager,rh,comptable du reste du module comptabilité.
+    Route::get('/comptabilite/payslips/mine', [PayrollController::class, 'mine'])->middleware('role:driver');
+
+    // ── NOTIFICATIONS ─────────────────────────────────────────────────
+    // Ouvert à tout utilisateur authentifié, scopé au sien uniquement.
+    Route::prefix('notifications')->group(function () {
+        Route::get('/',                [NotificationController::class, 'index']);
+        Route::get('/unread-count',    [NotificationController::class, 'unreadCount']);
+        Route::patch('/read-all',      [NotificationController::class, 'markAllRead']);
+        Route::patch('/{notification}/read', [NotificationController::class, 'markRead']);
+    });
+
+    // ── PISTE D'AUDIT ─────────────────────────────────────────────────
+    Route::get('/audit', [ActivityLogController::class, 'index'])->middleware('role:manager,dg');
+
     // ── MODULE CHAUFFEURS ─────────────────────────────────────────────
     // RH gère uniquement les documents chauffeurs — le reste des écritures est réservé au Manager
     Route::prefix('drivers')->group(function () {
@@ -197,6 +226,8 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/scores/monthly',                    [DriverController::class, 'monthlyScores']);
         // IMPORTANT: routes nommées avant {driver}
         Route::get('/documents/expiring',                [DriverController::class, 'expiringDocuments']);
+        Route::get('/mine/scores',                       [DriverController::class, 'myScores'])->middleware('role:driver');
+        Route::get('/export',                            [DriverController::class, 'export'])->middleware('role:manager,rh');
         Route::get('/{driver}',                          [DriverController::class, 'show']);
         Route::put('/{driver}',                          [DriverController::class, 'update'])->middleware('role:manager');
         Route::patch('/{driver}/status',                 [DriverController::class, 'updateStatus'])->middleware('role:manager');
@@ -219,6 +250,7 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::patch('/vouchers/{voucher}/reject',       [FuelVoucherController::class, 'reject'])->middleware('role:manager');
         Route::patch('/vouchers/{voucher}/consume',      [FuelVoucherController::class, 'consume'])->middleware('role:manager');
         Route::post('/consumption',                      [FuelVoucherController::class, 'recordConsumption'])->middleware('role:manager,dispatcher');
+        Route::get('/consumption',                       [FuelVoucherController::class, 'consumptionIndex']);
         Route::get('/consumption/vehicle/{vehicle}',     [FuelVoucherController::class, 'vehicleHistory']);
         Route::get('/consumption/stats',                 [FuelVoucherController::class, 'stats']);
     });

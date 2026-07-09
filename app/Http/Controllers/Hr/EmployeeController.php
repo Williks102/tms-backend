@@ -6,12 +6,19 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\User;
+use App\Services\Audit\ActivityLogger;
+use App\Services\Export\CsvExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EmployeeController extends Controller
 {
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly CsvExportService $csv,
+    ) {}
     // ─────────────────────────────────────────────────────────────────────
     // GET /api/v1/hr/employees
     // Fusionne Users (staff) et Drivers en une liste unique — pas de table
@@ -69,6 +76,30 @@ class EmployeeController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // GET /api/v1/hr/employees/export — liste fusionnée Users+Drivers, CSV
+    // (jamais base_salary_fcfa — réservé aux mêmes rôles que ce contrôleur,
+    // mais un export téléchargé peut facilement être partagé hors de l'app).
+    // ─────────────────────────────────────────────────────────────────────
+    public function export(): StreamedResponse
+    {
+        $users = User::all()->map(fn (User $u) => [
+            $u->name, $u->email, $u->role->label(), $u->phone,
+            $u->hired_at?->toDateString(), $u->contract_type, $u->contract_end_date?->toDateString(),
+        ]);
+
+        $drivers = Driver::all()->map(fn (Driver $d) => [
+            $d->fullName(), '—', 'Chauffeur', $d->phone,
+            $d->hired_at?->toDateString(), $d->contract_type, $d->contract_end_date?->toDateString(),
+        ]);
+
+        return $this->csv->stream(
+            ['Nom', 'Email', 'Rôle', 'Téléphone', "Date d'embauche", 'Type contrat', 'Fin contrat'],
+            $users->concat($drivers),
+            'personnel-' . now()->format('Y-m-d') . '.csv',
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // GET /api/v1/hr/employees/{type}/{id}   type = user|driver
     // ─────────────────────────────────────────────────────────────────────
     public function show(string $type, int $id): JsonResponse
@@ -118,6 +149,13 @@ class EmployeeController extends Controller
         $password = Str::password(12);
 
         $user = User::create([...$data, 'password' => $password]);
+
+        $this->activityLogger->log(
+            'employee.created',
+            $user,
+            "Personnel créé: {$user->name} ({$user->role->value})",
+            userId: $request->user()->id,
+        );
 
         return response()->json([
             'message'            => 'Membre du personnel créé avec succès',
@@ -194,6 +232,14 @@ class EmployeeController extends Controller
         }
 
         fclose($handle);
+
+        $this->activityLogger->log(
+            'employee.imported',
+            null,
+            'Import CSV personnel: ' . count($created) . ' créé(s), ' . count($failed) . ' échec(s)',
+            metadata: ['created_emails' => array_column($created, 'email'), 'failed_rows' => array_column($failed, 'row')],
+            userId: $request->user()->id,
+        );
 
         return response()->json([
             'message' => count($created) . ' créé(s), ' . count($failed) . ' échec(s)',

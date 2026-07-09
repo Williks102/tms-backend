@@ -26,6 +26,23 @@ class PayrollController extends Controller
         return response()->json($payslips);
     }
 
+    // GET /api/v1/comptabilite/payslips/mine — libre-service, chauffeur
+    // connecté uniquement, jamais un brouillon (rien à voir tant que non validé).
+    public function mine(Request $request): JsonResponse
+    {
+        $driver = $request->user()->driver;
+        abort_unless($driver, 403, "Ce compte n'est lié à aucun profil chauffeur");
+
+        $payslips = Payslip::where('employable_type', \App\Models\Driver::class)
+            ->where('employable_id', $driver->id)
+            ->whereIn('status', ['validated', 'paid'])
+            ->with('lines.account')
+            ->latest('period')
+            ->paginate($request->integer('per_page', 12));
+
+        return response()->json($payslips);
+    }
+
     // POST /api/v1/comptabilite/payslips/generate
     public function generate(Request $request): JsonResponse
     {

@@ -11,6 +11,7 @@ use App\Models\IncidentMedia;
 use App\Models\IncidentQualityScore;
 use App\Models\Route;
 use App\Models\Vehicle;
+use App\Services\Audit\ActivityLogger;
 use App\Services\Incidents\IncidentService;
 use App\Services\Incidents\QualityScoreService;
 use Carbon\Carbon;
@@ -24,6 +25,7 @@ class IncidentController extends Controller
     public function __construct(
         private readonly IncidentService    $incidentService,
         private readonly QualityScoreService $qualityService,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     // GET /api/v1/incidents
@@ -38,6 +40,10 @@ class IncidentController extends Controller
         if ($request->filled('vehicle_id'))$query->where('vehicle_id', $request->vehicle_id);
         if ($request->filled('from'))      $query->where('occurred_at', '>=', $request->from);
         if ($request->filled('to'))        $query->where('occurred_at', '<=', $request->to);
+        // Vue "mes saisies" dispatcher — jamais un id arbitraire fourni par
+        // le client, toujours l'utilisateur connecté (même sécurité que les
+        // routes /mine déjà en place ailleurs).
+        if ($request->boolean('mine'))     $query->where('reported_by', $request->user()->id);
 
         $incidents = $query->latest('occurred_at')->paginate(20);
 
@@ -120,6 +126,14 @@ class IncidentController extends Controller
 
         try {
             $incident = $this->incidentService->updateStatus($incident, $data['status'], $data);
+
+            $this->activityLogger->log(
+                'incident.status_changed',
+                $incident,
+                "Incident #{$incident->id} ({$incident->title}) → {$data['status']}",
+                userId: $request->user()->id,
+            );
+
             return response()->json(['message' => 'Statut mis à jour', 'incident' => $incident]);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 422);

@@ -7,6 +7,7 @@ namespace App\Services\Tickets;
 use App\Models\Departure;
 use App\Models\RouteStop;
 use App\Models\Ticket;
+use App\Services\Audit\ActivityLogger;
 use App\Services\Fuel\AlertDispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ class TicketService
 {
     public function __construct(
         private readonly AlertDispatcher $alertDispatcher,
+        private readonly ActivityLogger $activityLogger,
     ) {}
 
     /**
@@ -185,6 +187,13 @@ class TicketService
                 // Libère la place et résout une éventuelle alerte de surbooking
                 Departure::where('id', $ticket->departure_id)->increment('seats_available');
                 $this->alertDispatcher->resolveFor($ticket->departure, 'overbooking');
+
+                $this->activityLogger->log(
+                    $newStatus === 'refunded' ? 'ticket.refunded' : 'ticket.cancelled',
+                    $ticket,
+                    "Billet {$ticket->reference} — {$updates['cancellation_reason']}",
+                    userId: $actingUserId,
+                );
             }
 
             $ticket->update($updates);

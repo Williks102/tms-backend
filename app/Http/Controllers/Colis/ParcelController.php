@@ -140,7 +140,7 @@ class ParcelController extends Controller
         ]);
 
         try {
-            $parcel = $this->service->markException($parcel, $data['status'], $data['reason']);
+            $parcel = $this->service->markException($parcel, $data['status'], $data['reason'], $request->user()->id);
 
             return response()->json(['message' => 'Statut du colis mis à jour', 'parcel' => $parcel]);
         } catch (\RuntimeException $e) {

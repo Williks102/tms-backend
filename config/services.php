@@ -36,13 +36,12 @@ return [
     ],
 
     // Passerelle de paiement en ligne (achat de billet, /billets) — voir
-    // App\Services\Payments\PaiementProService. base_url pointe le sandbox par
-    // défaut : à changer explicitement en production (URL non confirmée par
-    // PaiementPro dans la documentation publique — ne jamais supposer un hôte
-    // de prod, le demander à leur support avant la mise en ligne réelle).
+    // App\Services\Payments\PaiementProService (SOAP, initTransact). Pas
+    // d'hôte sandbox distinct pour ce service — www.paiementpro.net sert à
+    // la fois le test et le réel, le mode dépend du merchantId lui-même.
     'paiementpro' => [
         'merchant_id'  => env('PAIEMENTPRO_MERCHANT_ID'),
-        'base_url'     => env('PAIEMENTPRO_BASE_URL', 'https://sandbox.paiementpro.net'),
+        'base_url'     => env('PAIEMENTPRO_BASE_URL', 'https://www.paiementpro.net'),
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
     ],
 

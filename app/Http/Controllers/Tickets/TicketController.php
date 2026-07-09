@@ -86,7 +86,13 @@ class TicketController extends Controller
     {
         $request->validate(['ref' => 'required|string']);
 
-        $ticket = Ticket::where('payment_token', $request->string('ref'))->first();
+        // PaiementPro ajoute ses propres paramètres à returnURL avec un "?"
+        // même quand notre URL en a déjà un (returnURL?ref=TOKEN devient
+        // returnURL?ref=TOKEN?merchantId=..., observé en sandbox réel) — le
+        // "?" superflu et tout ce qui suit ne font jamais partie du token.
+        $ref = strtok((string) $request->string('ref'), '?');
+
+        $ticket = Ticket::where('payment_token', $ref)->first();
 
         if (!$ticket) {
             return response()->json(['status' => 'unknown'], 404);

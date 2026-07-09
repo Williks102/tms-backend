@@ -64,7 +64,7 @@ class PaiementProService
             'customerEmail'        => $ticket->passenger_email,
             'customerFirstName'    => $firstName,
             'customerLastname'     => $lastName,
-            'customerPhoneNumber'  => $ticket->passenger_phone,
+            'customerPhoneNumber'  => $this->normalizePhone($ticket->passenger_phone),
             'notificationURL'      => rtrim(config('app.url'), '/') . '/api/v1/payments/paiementpro/notify',
             'returnURL'            => rtrim(config('services.paiementpro.frontend_url'), '/') . '/billets/retour?ref=' . $ticket->payment_token,
             'returnContext'        => json_encode(['ticket_id' => $ticket->id]),
@@ -108,5 +108,18 @@ class PaiementProService
         $parts = preg_split('/\s+/', trim($fullName), 2);
 
         return [$parts[0] ?? $fullName, $parts[1] ?? $parts[0] ?? $fullName];
+    }
+
+    /**
+     * PaiementPro exige 8 à 15 chiffres, rien d'autre — /billets collecte le
+     * téléphone en format libre ("+225 07 00 00 00 00"), donc espaces/+/tirets
+     * sont retirés ici plutôt que de contraindre la saisie côté client.
+     * Erreur réellement rencontrée en sandbox : "Le numéro de téléphone est
+     * invalide (8 à 15 chiffres)" avec un numéro saisi au format affiché en
+     * placeholder — le placeholder lui-même induisait l'échec.
+     */
+    private function normalizePhone(?string $phone): ?string
+    {
+        return $phone ? preg_replace('/\D+/', '', $phone) : $phone;
     }
 }

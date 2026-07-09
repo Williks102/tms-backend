@@ -2,6 +2,7 @@
 
 namespace App\Services\Hr;
 
+use App\Enums\Role;
 use App\Models\Driver;
 use App\Models\LeaveRequest;
 use App\Models\User;
@@ -42,7 +43,7 @@ class LeaveRequestService
             throw new \Exception('Une demande de congé chevauchante existe déjà pour cette personne');
         }
 
-        return LeaveRequest::create([
+        $leave = LeaveRequest::create([
             'employable_type' => $employable::class,
             'employable_id'   => $employable->getKey(),
             'type'            => $data['type'],
@@ -52,6 +53,14 @@ class LeaveRequestService
             'status'          => 'pending',
             'requested_at'    => now(),
         ]);
+
+        $recipientIds = User::whereIn('role', [Role::MANAGER->value, Role::RH->value])->pluck('id')->all();
+        if ($recipientIds) {
+            $employableName = $employable instanceof Driver ? "{$employable->first_name} {$employable->last_name}" : $employable->name;
+            $this->notifications->notify($recipientIds, 'leave.requested', 'Nouvelle demande de congé', "{$employableName} demande un congé du {$start->format('d/m/Y')} au {$end->format('d/m/Y')} — en attente de décision.");
+        }
+
+        return $leave;
     }
 
     /**

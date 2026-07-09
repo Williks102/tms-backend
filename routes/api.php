@@ -7,6 +7,7 @@ use App\Http\Controllers\Accounting\AccountController;
 use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\PayrollController;
+use App\Http\Controllers\Accounting\PayrollTaxBracketController;
 use App\Http\Controllers\Accounting\ReportController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AlertController;
@@ -188,6 +189,12 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
         Route::put('/payslips/{payslip}/lines',      [PayrollController::class, 'updateLines']);
         Route::patch('/payslips/{payslip}/validate', [PayrollController::class, 'validatePayslip']);
         Route::patch('/payslips/{payslip}/pay',      [PayrollController::class, 'pay']);
+
+        // Barème CNPS/ITS — éditable, voir avertissement dans PayrollTaxBracketSeeder
+        Route::get('/payroll-tax-brackets',              [PayrollTaxBracketController::class, 'index']);
+        Route::post('/payroll-tax-brackets',             [PayrollTaxBracketController::class, 'store']);
+        Route::put('/payroll-tax-brackets/{bracket}',    [PayrollTaxBracketController::class, 'update']);
+        Route::delete('/payroll-tax-brackets/{bracket}', [PayrollTaxBracketController::class, 'destroy']);
     });
 
     // ── MODULE COLIS (courrier / expédition) ───────────────────────────

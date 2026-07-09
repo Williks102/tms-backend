@@ -20,7 +20,7 @@ class Driver extends Model
         'license_number', 'license_category',
         'license_expires_at', 'medical_expires_at',
         'hired_at', 'status', 'user_id',
-        'contract_type', 'contract_end_date', 'base_salary_fcfa',
+        'contract_type', 'contract_end_date', 'base_salary_fcfa', 'parts_fiscales',
     ];
 
     protected $casts = [
@@ -29,6 +29,7 @@ class Driver extends Model
         'hired_at'           => 'date',
         'contract_end_date'  => 'date',
         'base_salary_fcfa'   => 'decimal:2',
+        'parts_fiscales'     => 'decimal:1',
     ];
 
     // ── Relations ──────────────────────────────────────────────────────

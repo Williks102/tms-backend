@@ -96,6 +96,7 @@ class DriverController extends Controller
             'contract_type'     => 'nullable|string|max:50',
             'contract_end_date' => 'nullable|date',
             'base_salary_fcfa'  => 'nullable|numeric|min:0',
+            'parts_fiscales'    => 'nullable|numeric|min:1|max:99.9',
         ]);
 
         $driver->update($data);

@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             UserSeeder::class,           // 1. Utilisateurs admin + gestionnaires
             AccountingChartSeeder::class, // 1bis. Plan comptable OHADA + journaux
+            PayrollTaxBracketSeeder::class, // 1ter. Barème CNPS/ITS (illustratif, voir avertissement)
             BoardingGateSeeder::class,   // 2. Quais d'embarquement
             RouteSeeder::class,          // 3. Lignes de transport
             VehicleSeeder::class,        // 4. Parc de véhicules

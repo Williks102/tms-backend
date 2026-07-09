@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Services\Accounting;
 
+use App\Models\Accounting\AccountingAccount;
 use App\Models\Accounting\Payslip;
 use App\Models\Accounting\PayslipLine;
 use App\Models\Driver;
@@ -21,6 +22,7 @@ class PayrollService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly AccountingEntryService $accounting,
+        private readonly PayrollTaxService $payrollTax,
     ) {}
 
     /**
@@ -84,11 +86,56 @@ class PayrollService
                 }
             }
 
+            $this->addTaxRetenueLines($payslip, $employable);
+
             $this->recalculate($payslip);
             $created++;
         }
 
         return ['created' => $created, 'skipped' => $skipped];
+    }
+
+    /**
+     * Ajoute les retenues CNPS + ITS calculées automatiquement (voir
+     * PayrollTaxService — barème éditable, valeurs de départ illustratives,
+     * à valider par un expert-comptable). Basé sur le brut déjà posé sur ce
+     * bulletin au moment de l'appel (salaire de base + commission éventuelle) —
+     * reste éditable/supprimable par le comptable avant validation comme
+     * toute ligne du bulletin, exactement comme la commission trajets.
+     */
+    private function addTaxRetenueLines(Payslip $payslip, User|Driver $employable): void
+    {
+        $gross = (float) $payslip->lines()->where('type', 'gain')->sum('amount_fcfa');
+
+        if ($gross <= 0) {
+            return;
+        }
+
+        $cnps = $this->payrollTax->calculateCnps($gross);
+        $its  = $this->payrollTax->calculateIts($gross, (float) $employable->parts_fiscales);
+
+        $cnpsAccountId = AccountingAccount::where('code', '431')->value('id');
+        $itsAccountId  = AccountingAccount::where('code', '447')->value('id');
+
+        if ($cnps > 0) {
+            PayslipLine::create([
+                'payslip_id'  => $payslip->id,
+                'type'        => 'retenue',
+                'label'       => 'CNPS (retraite, part salariale)',
+                'amount_fcfa' => $cnps,
+                'account_id'  => $cnpsAccountId,
+            ]);
+        }
+
+        if ($its > 0) {
+            PayslipLine::create([
+                'payslip_id'  => $payslip->id,
+                'type'        => 'retenue',
+                'label'       => 'ITS',
+                'amount_fcfa' => $its,
+                'account_id'  => $itsAccountId,
+            ]);
+        }
     }
 
     public function recalculate(Payslip $payslip): Payslip

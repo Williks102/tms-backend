@@ -144,6 +144,9 @@ class EmployeeController extends Controller
             'contract_type'     => 'nullable|string|max:50',
             'contract_end_date' => 'nullable|date',
             'base_salary_fcfa'  => 'nullable|numeric|min:0',
+            // Quotient familial ITS — 1 = célibataire sans enfant (défaut du
+            // modèle si omis). Voir Services/Accounting/PayrollTaxService.
+            'parts_fiscales'    => 'nullable|numeric|min:1|max:99.9',
         ]);
 
         $password = Str::password(12);

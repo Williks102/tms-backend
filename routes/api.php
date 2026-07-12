@@ -78,7 +78,12 @@ Route::prefix('v1/colis/track')->middleware('throttle:60,1')->group(function () 
 
 // Compte client léger (billets + colis) — pas de mot de passe, le numéro de
 // téléphone est le seul "secret", même principe que /colis/track ci-dessus.
-Route::get('v1/mes-achats', [MyPurchasesController::class, 'index'])->middleware('throttle:20,1');
+// Throttle durci (correctif.md point 7) : un numéro ivoirien a peu d'entropie
+// (10 chiffres, préfixes opérateurs connus) comparé à un tracking_number
+// aléatoire — 5/min réduit fortement le débit d'énumération. Mitigation
+// partielle seule (une vérification par OTP SMS serait la solution complète,
+// mais aucun fournisseur SMS n'est configuré dans ce projet actuellement).
+Route::get('v1/mes-achats', [MyPurchasesController::class, 'index'])->middleware('throttle:5,1');
 
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
 

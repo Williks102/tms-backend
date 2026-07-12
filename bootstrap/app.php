@@ -13,10 +13,39 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Sanctum SPA (cookie httpOnly) — voir correctif.md point 4. Ajoute
+        // EnsureFrontendRequestsAreStateful au groupe api : toute requête dont
+        // l'Origin/Referer correspond à SANCTUM_STATEFUL_DOMAINS est traitée
+        // en session (cookie), les autres (curl, futurs clients mobiles)
+        // continuent d'utiliser un Bearer token classique — les deux
+        // mécanismes coexistent sans changement ailleurs dans l'app.
+        $middleware->statefulApi();
+
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // API pure — pas de Blade. Sans ceci, une requête non authentifiée
+        // sans header Accept: application/json explicite fait tomber le
+        // handler d'exceptions par défaut sur une tentative de rendu HTML au
+        // lieu du JSON attendu. Force TOUTE réponse d'erreur de cette API à
+        // être du JSON, quel que soit le header Accept envoyé par le client.
         //
+        // ⚠️ Piège réel rencontré : ce callback seul ne suffit PAS à éviter
+        // le 500 sur ce chemin précis. `Handler::unauthenticated()` retombe
+        // sur `redirect()->guest($exception->redirectTo($request) ??
+        // route('login'))` dès que `shouldReturnJson()` renvoie false pour
+        // CE callback à l'instant où l'exception est levée (observé : un
+        // AuthenticationException levé depuis le middleware `auth:sanctum`
+        // avant résolution complète de la requête ne passe pas forcément par
+        // ce callback comme attendu) — et le `?? route('login')` s'exécute
+        // alors même si `Authenticate::redirectUsing()`/
+        // `AuthenticationException::redirectUsing()` ont été enregistrés
+        // pour renvoyer null. Sans route nommée 'login', ce repli lève une
+        // RouteNotFoundException → 500 au lieu du 401 attendu. Correction
+        // réelle : garder ce callback ET définir une route 'login' de repli
+        // (voir routes/web.php) qui ne sert jamais en pratique mais empêche
+        // le crash si ce chemin est emprunté malgré tout.
+        $exceptions->shouldRenderJsonWhen(fn () => true);
     })->create();

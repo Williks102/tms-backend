@@ -28,9 +28,11 @@ return [
 
     'max_age' => 0,
 
-    // false tant que l'auth reste par Bearer token (pas de cookie cross-site à
-    // transmettre). À repasser à true seulement si migration vers Sanctum SPA
-    // (cookie HttpOnly) — jamais combiné avec allowed_origins = '*'.
-    'supports_credentials' => false,
+    // true — migration vers Sanctum SPA (cookie HttpOnly) effectuée, voir
+    // correctif.md point 4 et AuthController::login(). Obligatoire pour que
+    // le navigateur transmette le cookie de session cross-origin — jamais à
+    // combiner avec allowed_origins = '*' (interdit par la spec CORS de
+    // toute façon dès que credentials=true, le navigateur rejette).
+    'supports_credentials' => true,
 
 ];

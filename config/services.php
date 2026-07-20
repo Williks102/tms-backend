@@ -45,4 +45,12 @@ return [
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
     ],
 
+    // CAPTCHA invisible Cloudflare Turnstile — voir App\Services\Security\
+    // TurnstileService, utilisé par MyPurchasesController (/mes-achats,
+    // correctif.md point 7 — alternative retenue à l'OTP SMS, aucun
+    // fournisseur SMS configuré dans ce projet).
+    'turnstile' => [
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+    ],
+
 ];

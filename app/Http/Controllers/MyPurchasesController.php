@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\Colis\ParcelTrackResource;
 use App\Models\Parcel;
 use App\Models\Ticket;
+use App\Services\Security\TurnstileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -12,13 +13,31 @@ use Illuminate\Http\Request;
  * Compte client léger — pas de mot de passe, le numéro de téléphone est le
  * seul "secret" (même principe déjà accepté pour /suivi-colis). Public,
  * hors auth:sanctum, throttlé comme les autres endpoints publics.
+ *
+ * Le numéro de téléphone a une entropie faible (10 chiffres, préfixes
+ * opérateurs connus) — throttle seul insuffisant contre un script distribué
+ * sur plusieurs IP (voir correctif.md point 7). CAPTCHA Turnstile en
+ * complément : bloque l'automatisation sans dépendre d'un fournisseur
+ * SMS/email (aucun n'est configuré dans ce projet à ce jour).
  */
 class MyPurchasesController extends Controller
 {
-    // GET /api/v1/mes-achats?phone=
+    public function __construct(private readonly TurnstileService $turnstile)
+    {
+    }
+
+    // GET /api/v1/mes-achats?phone=&turnstile_token=
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate(['phone' => 'required|string|min:6|max:30']);
+        $data = $request->validate([
+            'phone'           => 'required|string|min:6|max:30',
+            'turnstile_token' => 'nullable|string',
+        ]);
+
+        if (!$this->turnstile->verify($data['turnstile_token'] ?? null)) {
+            return response()->json(['message' => 'Vérification de sécurité échouée. Réessayez.'], 422);
+        }
+
         $phone = $data['phone'];
 
         $tickets = Ticket::with('departure.route')

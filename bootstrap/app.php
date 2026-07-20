@@ -21,6 +21,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // mécanismes coexistent sans changement ailleurs dans l'app.
         $middleware->statefulApi();
 
+        // Railway (et la plupart des PaaS) sert l'app derrière un reverse
+        // proxy — sans ça, $request->ip() renvoie l'IP interne du proxy pour
+        // TOUTES les requêtes, pas celle du vrai client. Impact concret :
+        // RateLimiter::hit() dans AuthController::login() (clé basée sur
+        // l'IP) traiterait tous les visiteurs comme une seule IP, un échec
+        // de connexion de quelqu'un d'autre pouvant bloquer tout le monde —
+        // même chose pour les throttle: sur /mes-achats et /tickets/online.
+        // 'at: *' est sûr ici : Railway ne laisse aucun trafic atteindre le
+        // conteneur autrement que via son propre proxy géré.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);

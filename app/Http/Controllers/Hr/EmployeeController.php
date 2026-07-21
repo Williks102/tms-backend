@@ -19,6 +19,17 @@ class EmployeeController extends Controller
         private readonly ActivityLogger $activityLogger,
         private readonly CsvExportService $csv,
     ) {}
+
+    // Role::SUPER_ADMIN est réservé au porteur du projet — jamais assignable
+    // via la création de personnel classique (voir App\Enums\Role et
+    // tms:create-super-admin), qu'il s'agisse de store() ou d'import().
+    private function assignableRoleValues(): array
+    {
+        return array_column(
+            array_filter(Role::cases(), fn (Role $r) => $r !== Role::SUPER_ADMIN),
+            'value'
+        );
+    }
     // ─────────────────────────────────────────────────────────────────────
     // GET /api/v1/hr/employees
     // Fusionne Users (staff) et Drivers en une liste unique — pas de table
@@ -138,7 +149,7 @@ class EmployeeController extends Controller
         $data = $request->validate([
             'name'              => 'required|string|max:150',
             'email'             => 'required|email|unique:users,email',
-            'role'              => 'required|in:' . implode(',', array_column(Role::cases(), 'value')),
+            'role'              => 'required|in:' . implode(',', $this->assignableRoleValues()),
             'phone'             => 'nullable|string|max:20',
             'hired_at'          => 'nullable|date',
             'contract_type'     => 'nullable|string|max:50',
@@ -181,7 +192,7 @@ class EmployeeController extends Controller
 
         $handle = fopen($request->file('file')->getRealPath(), 'r');
         $header = array_map(fn ($h) => strtolower(trim($h)), fgetcsv($handle) ?: []);
-        $validRoles = array_column(Role::cases(), 'value');
+        $validRoles = $this->assignableRoleValues();
 
         $created = [];
         $failed  = [];

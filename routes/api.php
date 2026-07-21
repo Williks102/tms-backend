@@ -18,6 +18,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MyPurchasesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Payments\PaiementProWebhookController;
+use App\Http\Controllers\SuperAdmin\SuperAdminController;
 use App\Http\Controllers\Drivers\DriverController;
 use App\Http\Controllers\Fuel\FuelVoucherController;
 use App\Http\Controllers\Fuel\MaintenancePlanController;
@@ -335,4 +336,17 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'subscription.active'])->group(
         Route::get('/{ticket}',                            [TicketController::class, 'show']);
         Route::patch('/{ticket}/status',                   [TicketController::class, 'updateStatus'])->middleware('role:manager,caissier');
     });
+});
+
+// ── SUPER ADMIN (revente SaaS) ──────────────────────────────────────────
+// Volontairement HORS du groupe subscription.active ci-dessus : le super
+// admin doit toujours pouvoir réactiver un abonnement suspendu, même quand
+// il l'est. Role::SUPER_ADMIN n'est jamais assignable via la création de
+// personnel (EmployeeController) ni seedé automatiquement pour un client —
+// voir tms:create-super-admin et CLAUDE.md § Revente SaaS.
+Route::prefix('v1/super-admin')->middleware(['auth:sanctum', 'role:super_admin'])->group(function () {
+    Route::get('/tiers',            [SuperAdminController::class, 'tiers']);
+    Route::get('/billing-report',   [SuperAdminController::class, 'billingReport']);
+    Route::get('/subscription',     [SuperAdminController::class, 'subscription']);
+    Route::patch('/subscription',   [SuperAdminController::class, 'updateSubscription']);
 });

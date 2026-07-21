@@ -2,9 +2,9 @@
 // ══════════════════════════════════════════════════════════════════════════
 // app/Console/Commands/SubscriptionStatusCommand.php
 //
-// Gère le statut d'abonnement SaaS de CE déploiement client (voir
-// App\Models\SubscriptionStatus, App\Http\Middleware\EnsureSubscriptionActive
-// et runbook-nouveau-client.md). Sans option, affiche le statut actuel.
+// Gère le statut d'abonnement SaaS de CE déploiement client. Logique déléguée
+// à Services/SuperAdmin/BillingService (partagée avec SuperAdminController,
+// voir CLAUDE.md § Revente SaaS). Sans option, affiche le statut actuel.
 //
 //   php artisan tms:subscription                                 # consulter
 //   php artisan tms:subscription --set=suspended --note="Impayé depuis juin"
@@ -12,7 +12,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Console\Commands;
 
-use App\Models\SubscriptionStatus;
+use App\Services\SuperAdmin\BillingService;
 use Illuminate\Console\Command;
 
 class SubscriptionStatusCommand extends Command
@@ -24,11 +24,15 @@ class SubscriptionStatusCommand extends Command
 
     protected $description = 'Consulter ou changer le statut d\'abonnement SaaS de ce déploiement (coupe le back-office si suspendu)';
 
+    public function __construct(private readonly BillingService $billing)
+    {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
-        $subscription = SubscriptionStatus::current();
-
         $set = $this->option('set');
+
         if ($set !== null) {
             if (!in_array($set, ['active', 'suspended'], true)) {
                 $this->error("--set doit être 'active' ou 'suspended', reçu : '{$set}'");
@@ -36,16 +40,10 @@ class SubscriptionStatusCommand extends Command
                 return self::FAILURE;
             }
 
-            $subscription->status = $set;
-            if ($this->option('until')) {
-                $subscription->paid_until = $this->option('until');
-            }
-            if ($this->option('note')) {
-                $subscription->note = $this->option('note');
-            }
-            $subscription->save();
-
+            $subscription = $this->billing->updateSubscription($set, $this->option('until'), $this->option('note'));
             $this->info("Statut mis à jour : {$subscription->status}");
+        } else {
+            $subscription = $this->billing->currentSubscription();
         }
 
         $this->line('');

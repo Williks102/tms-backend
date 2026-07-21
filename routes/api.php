@@ -85,7 +85,7 @@ Route::prefix('v1/colis/track')->middleware('throttle:60,1')->group(function () 
 // mais aucun fournisseur SMS n'est configuré dans ce projet actuellement).
 Route::get('v1/mes-achats', [MyPurchasesController::class, 'index'])->middleware('throttle:5,1');
 
-Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'subscription.active'])->group(function () {
 
     // ── MODULE PLANNING ───────────────────────────────────────────────
     // Lecture ouverte à tous les rôles authentifiés — écriture réservée au Manager

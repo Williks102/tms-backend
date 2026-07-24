@@ -17,6 +17,13 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Voir 2024_01_05_000002_add_overbooking_type_to_system_alerts.php —
+        // même garde, même raison (syntaxe Postgres uniquement, no-op sous
+        // SQLite pour ne pas casser la suite de tests).
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('ALTER TABLE system_alerts DROP CONSTRAINT system_alerts_type_check');
         DB::statement(
             'ALTER TABLE system_alerts ADD CONSTRAINT system_alerts_type_check CHECK (type IN (' .
@@ -27,6 +34,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('ALTER TABLE system_alerts DROP CONSTRAINT system_alerts_type_check');
         DB::statement(
             'ALTER TABLE system_alerts ADD CONSTRAINT system_alerts_type_check CHECK (type IN (' .

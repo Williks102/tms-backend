@@ -95,6 +95,31 @@ class VehicleSeeder extends Seeder
                 'status'                      => 'available',
                 'notes'                       => 'Véhicule courtes distances',
             ],
+            // ── Camions (module Fret) ────────────────────────────────────
+            [
+                'plate_number'                => 'CI-9012-QR',
+                'type'                        => 'truck',
+                'model'                       => 'Mercedes-Benz Actros',
+                'capacity'                    => 0,
+                'cargo_capacity_kg'           => 20000,
+                'fuel_consumption_per_100km'  => 35.0,
+                'current_mileage_km'          => 88200,
+                'last_maintenance_km'         => 80000,
+                'maintenance_interval_km'     => 15000,
+                'status'                      => 'available',
+            ],
+            [
+                'plate_number'                => 'CI-4456-ST',
+                'type'                        => 'truck',
+                'model'                       => 'Renault Kerax',
+                'capacity'                    => 0,
+                'cargo_capacity_kg'           => 15000,
+                'fuel_consumption_per_100km'  => 33.0,
+                'current_mileage_km'          => 132400,
+                'last_maintenance_km'         => 130000,
+                'maintenance_interval_km'     => 15000,
+                'status'                      => 'available',
+            ],
         ];
 
         foreach ($vehicles as $vehicle) {

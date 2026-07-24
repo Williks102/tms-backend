@@ -215,10 +215,17 @@ class TicketController extends Controller
     // de la référence (contrôleur, manager)
     public function scan(Request $request): JsonResponse
     {
-        $request->validate(['reference' => 'required|string']);
+        $request->validate([
+            'reference'    => 'required|string',
+            'departure_id' => 'required|integer|exists:departures,id',
+        ]);
 
         try {
-            $ticket = $this->ticketService->scanBoard($request->string('reference'), $request->user()->id);
+            $ticket = $this->ticketService->scanBoard(
+                $request->string('reference'),
+                $request->integer('departure_id'),
+                $request->user()->id,
+            );
 
             return response()->json([
                 'message' => "Billet {$ticket->reference} embarqué",

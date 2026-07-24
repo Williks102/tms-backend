@@ -14,6 +14,9 @@ use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\Colis\ParcelController;
+use App\Http\Controllers\Fret\FreightClientController;
+use App\Http\Controllers\Fret\FreightPricingSettingController;
+use App\Http\Controllers\Fret\FreightShipmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MyPurchasesController;
 use App\Http\Controllers\NotificationController;
@@ -216,6 +219,24 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'subscription.active'])->group(
         Route::patch('/{parcel}/exception',  [ParcelController::class, 'markException'])->middleware('role:manager');
         Route::post('/{parcel}/media',       [ParcelController::class, 'uploadMedia']);
         Route::get('/{parcel}/media/{media}/download', [ParcelController::class, 'downloadMedia']);
+    });
+
+    // ── MODULE FRET (camions/expéditions dédiés, clients compte entreprise) ──
+    Route::prefix('fret')->middleware('role:manager,agent_fret')->group(function () {
+        // IMPORTANT: routes nommées avant {shipment}
+        Route::post('/quote',                        [FreightShipmentController::class, 'quote']);
+        Route::get('/pricing-settings',               [FreightPricingSettingController::class, 'index']);
+        Route::put('/pricing-settings',                [FreightPricingSettingController::class, 'update'])->middleware('role:manager');
+        Route::get('/clients',                        [FreightClientController::class, 'index']);
+        Route::post('/clients',                        [FreightClientController::class, 'store']);
+        Route::get('/clients/{client}',                [FreightClientController::class, 'show']);
+        Route::get('/shipments',                       [FreightShipmentController::class, 'index']);
+        Route::post('/shipments',                       [FreightShipmentController::class, 'store']);
+        Route::get('/shipments/{shipment}',             [FreightShipmentController::class, 'show']);
+        Route::patch('/shipments/{shipment}/assign',    [FreightShipmentController::class, 'assign']);
+        Route::patch('/shipments/{shipment}/status',    [FreightShipmentController::class, 'updateStatus']);
+        Route::patch('/shipments/{shipment}/cancel',    [FreightShipmentController::class, 'cancel']);
+        Route::post('/shipments/{shipment}/pay',        [FreightShipmentController::class, 'markPaid']);
     });
 
     // Congé en libre-service — ouvert à tout utilisateur authentifié (auth:sanctum

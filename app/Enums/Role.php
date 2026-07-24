@@ -13,6 +13,7 @@ enum Role: string
     case CONTROLEUR = 'controleur';
     case COMPTABLE  = 'comptable';
     case AGENT_COLIS = 'agent_colis';
+    case AGENT_FRET  = 'agent_fret';
 
     // Réservé au porteur du projet — jamais assignable via la création de
     // personnel classique (EmployeeController), jamais seedé automatiquement
@@ -33,6 +34,7 @@ enum Role: string
             self::CONTROLEUR  => 'Contrôleur',
             self::COMPTABLE   => 'Comptable',
             self::AGENT_COLIS => 'Agent colis',
+            self::AGENT_FRET  => 'Agent fret',
             self::SUPER_ADMIN => 'Super Admin',
         };
     }

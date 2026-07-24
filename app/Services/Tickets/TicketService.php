@@ -147,15 +147,19 @@ class TicketService
                 throw new \Exception('Aucune place disponible sur ce départ');
             }
 
-            $year  = now()->format('Y');
-            $count = Ticket::whereYear('created_at', $year)->count() + 1;
-            $ref   = sprintf('TCK-%s-%06d', $year, $count);
+            $year = now()->format('Y');
 
             $defaultFare = $destinationStop?->fare_from_origin ?? $departure->route->base_fare;
             $isOnline    = $channel === 'online';
 
+            // Placeholder unique — satisfait la contrainte NOT NULL/unique le
+            // temps de connaître l'id auto-incrémenté, seule source fiable de
+            // référence sous concurrence (voir remplacement juste après). Un
+            // count()+1 sur created_at pouvait produire la même référence pour
+            // deux ventes simultanées sur deux départs différents (runbook
+            // sécurité v3, point 1) — l'id, lui, ne collisionne jamais.
             $ticket = Ticket::create([
-                'reference'           => $ref,
+                'reference'           => 'PENDING-' . Str::random(24),
                 'departure_id'        => $departure->id,
                 'destination_stop_id' => $destinationStop?->id,
                 'passenger_name'      => $data['passenger_name'],
@@ -174,7 +178,10 @@ class TicketService
                 // la référence publique, séquentielle et donc devinable.
                 'payment_token'       => $isOnline ? Str::random(40) : null,
                 'payment_expires_at'  => $isOnline ? now()->addMinutes(self::PAYMENT_HOLD_MINUTES) : null,
-                'price_fcfa'          => $data['price_fcfa'] ?? $defaultFare,
+                // Canal en ligne : jamais la valeur du client, même si un champ
+                // price_fcfa parasite passait la validation — seul le guichet
+                // (caissier authentifié) peut fixer un prix explicite.
+                'price_fcfa'          => $isOnline ? $defaultFare : ($data['price_fcfa'] ?? $defaultFare),
                 // En ligne : reste "pending" jusqu'à confirmation webhook
                 // (voir confirmOnlinePayment()) — au guichet, payé immédiatement
                 // par le caissier au moment de la vente.
@@ -182,6 +189,9 @@ class TicketService
                 'sold_by'             => $soldBy,
                 'purchased_at'        => now(),
             ]);
+
+            $ref = sprintf('TCK-%s-%06d', $year, $ticket->id);
+            $ticket->update(['reference' => $ref]);
 
             $departure->decrement('seats_available');
 
@@ -290,12 +300,21 @@ class TicketService
      * le billet par référence plutôt que par id, puis réutilise la même
      * validation de transition/statut du départ que updateStatus().
      */
-    public function scanBoard(string $reference, int $actingUserId): Ticket
+    public function scanBoard(string $reference, int $departureId, int $actingUserId): Ticket
     {
         $ticket = Ticket::where('reference', $reference)->first();
 
         if (!$ticket) {
             throw new \Exception("Aucun billet trouvé pour la référence {$reference}");
+        }
+
+        // Sans ce contrôle, un billet valide pour un autre départ passe le
+        // scan dès lors que les deux embarquements sont simultanés — perte de
+        // recette invisible (runbook sécurité v3, point 4).
+        if ($ticket->departure_id !== $departureId) {
+            throw new \Exception(
+                "Ce billet n'est pas valable pour ce départ (billet émis pour le départ #{$ticket->departure_id})"
+            );
         }
 
         return $this->updateStatus($ticket, 'boarded', [], $actingUserId);

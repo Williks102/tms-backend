@@ -13,6 +13,14 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
+        // Comptes démo (mot de passe 'password' en clair, affichés sur /login)
+        // — jamais en production, ni via migrate:fresh --seed ni via db:seed
+        // isolé (runbook sécurité v3, point 5).
+        if (app()->environment('production')) {
+            $this->command->warn('  UserSeeder ignoré en production (comptes démo).');
+            return;
+        }
+
         $users = [
             [
                 'name'     => 'Directeur Général',
@@ -61,6 +69,12 @@ class UserSeeder extends Seeder
                 'email'    => 'colis@tms-ci.com',
                 'password' => Hash::make('password'),
                 'role'     => Role::AGENT_COLIS,
+            ],
+            [
+                'name'     => 'Bamba Souleymane',
+                'email'    => 'fret@tms-ci.com',
+                'password' => Hash::make('password'),
+                'role'     => Role::AGENT_FRET,
             ],
         ];
 

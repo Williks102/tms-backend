@@ -45,6 +45,12 @@ class VehicleController extends Controller
             $query->where('status', $request->status);
         }
 
+        // Module Fret : GET /vehicles?type=truck pour lister les camions
+        // disponibles, réutilise cet endpoint plutôt qu'une route dédiée.
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type'));
+        }
+
         if ($request->filled('search')) {
             $term = $request->string('search');
             $query->where(fn ($q) => $q
@@ -64,8 +70,11 @@ class VehicleController extends Controller
     {
         $data = $request->validate([
             'plate_number'               => 'required|string|max:20|unique:vehicles,plate_number',
+            'type'                       => 'nullable|in:bus,truck',
             'model'                      => 'required|string|max:100',
-            'capacity'                   => 'required|integer|min:1',
+            // min:0 (pas min:1) : un camion (type=truck) n'a pas de places
+            // assises, 0 est la valeur légitime — voir VehicleSeeder.
+            'capacity'                   => 'required|integer|min:0',
             'fuel_consumption_per_100km' => 'required|numeric|min:0',
             'current_mileage_km'         => 'nullable|numeric|min:0',
             'maintenance_interval_km'    => 'nullable|numeric|min:0',
@@ -109,8 +118,9 @@ class VehicleController extends Controller
     {
         $data = $request->validate([
             'plate_number'               => "string|max:20|unique:vehicles,plate_number,{$vehicle->id}",
+            'type'                       => 'in:bus,truck',
             'model'                      => 'string|max:100',
-            'capacity'                   => 'integer|min:1',
+            'capacity'                   => 'integer|min:0',
             'fuel_consumption_per_100km' => 'numeric|min:0',
             'current_mileage_km'         => 'numeric|min:0',
             'maintenance_interval_km'    => 'numeric|min:0',

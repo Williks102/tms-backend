@@ -30,7 +30,8 @@ class StoreOnlineTicketRequest extends FormRequest
             // à 'online' côté serveur (voir TicketService::issue()), jamais
             // fourni par le client.
             'payment_channel'      => ['required', Rule::in(PaiementProService::CHANNELS)],
-            'price_fcfa'           => 'nullable|numeric|min:0',
+            // Jamais de price_fcfa ici — canal public, tarif toujours recalculé
+            // serveur dans TicketService::issue() (voir runbook sécurité, point 2).
         ];
     }
 

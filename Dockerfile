@@ -1,4 +1,4 @@
-FROM php:8.2-fpm
+FROM php:8.4-fpm
 
 # Installation des dépendances système et extensions PHP nécessaires
 RUN apt-get update && apt-get install -y \
@@ -19,4 +19,3 @@ RUN composer install --no-dev --optimize-autoloader
 EXPOSE 8080
 
 CMD php artisan serve --host=0.0.0.0 --port=8080
-

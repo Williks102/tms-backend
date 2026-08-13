@@ -15,7 +15,9 @@ COPY . .
 
 RUN composer install --no-dev --optimize-autoloader
 
+RUN chmod +x docker/start.sh
+
 # Exposer le port par défaut de Render
 EXPOSE 8080
 
-CMD php artisan serve --host=0.0.0.0 --port=8080
+CMD ["docker/start.sh"]

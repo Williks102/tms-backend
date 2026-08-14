@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════════════════
 namespace App\Http\Controllers\Drivers;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\DriverDocument;
@@ -19,12 +20,23 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DriverController extends Controller
 {
+    private const SALARY_FIELDS = ['base_salary_fcfa', 'parts_fiscales'];
+
     public function __construct(
         private readonly RestComplianceService $restService,
         private readonly EcoScoreService $ecoService,
         private readonly ActivityLogger $activityLogger,
         private readonly CsvExportService $csv,
     ) {}
+
+    // GET /drivers et /{driver} sont ouverts à tout rôle authentifié (comme le
+    // reste du module planning) — le salaire (Driver::$hidden) ne doit
+    // ressortir dans la réponse JSON que pour manager/rh, comme pour le
+    // module HR (routes/api.php: role:manager,rh).
+    private function canViewSalary(Request $request): bool
+    {
+        return $request->user()?->hasAnyRole([Role::MANAGER, Role::RH]) ?? false;
+    }
 
     // GET /api/v1/drivers/export
     public function export(): StreamedResponse
@@ -53,6 +65,10 @@ class DriverController extends Controller
 
         $drivers = $query->orderBy('last_name')->paginate(20);
 
+        if ($this->canViewSalary($request)) {
+            $drivers->getCollection()->each->makeVisible(self::SALARY_FIELDS);
+        }
+
         return response()->json($drivers);
     }
 
@@ -75,7 +91,7 @@ class DriverController extends Controller
 
         return response()->json([
             'message' => 'Chauffeur créé avec succès',
-            'driver'  => $driver,
+            'driver'  => $driver->makeVisible(self::SALARY_FIELDS),
         ], 201);
     }
 
@@ -103,7 +119,7 @@ class DriverController extends Controller
 
         return response()->json([
             'message' => 'Chauffeur mis à jour',
-            'driver'  => $driver->fresh(),
+            'driver'  => $driver->fresh()->makeVisible(self::SALARY_FIELDS),
         ]);
     }
 
@@ -176,7 +192,7 @@ class DriverController extends Controller
     }
 
     // GET /api/v1/drivers/{driver}
-    public function show(Driver $driver): JsonResponse
+    public function show(Request $request, Driver $driver): JsonResponse
     {
         $driver->load([
             'restLogs'     => fn($q) => $q->latest('duty_start')->limit(10),
@@ -184,6 +200,10 @@ class DriverController extends Controller
             'documents',
             'monthlyScores'=> fn($q) => $q->limit(6),
         ]);
+
+        if ($this->canViewSalary($request)) {
+            $driver->makeVisible(self::SALARY_FIELDS);
+        }
 
         return response()->json([
             'driver'      => $driver,

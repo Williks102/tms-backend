@@ -322,25 +322,30 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'subscription.active'])->group(
     });
 
 
-    // Dispatcher signale les incidents et leurs actions/médias — statut et suppression réservés au Manager
-    Route::prefix('incidents')->group(function () {
+    // Dispatcher signale les incidents et leurs actions/médias — statut et
+    // suppression réservés au Manager. Lecture (détails, médias, scores
+    // qualité nominatifs, impact financier) réservée à manager,dispatcher —
+    // pas de lecture ouverte à tout rôle authentifié ici, contrairement à
+    // planning/véhicules (données disciplinaires/financières sensibles).
+    Route::prefix('incidents')->middleware('role:manager,dispatcher')->group(function () {
         Route::get('/quality/drivers',               [IncidentController::class, 'qualityDrivers']);
         Route::get('/quality/vehicles',              [IncidentController::class, 'qualityVehicles']);
         Route::get('/quality/routes',                [IncidentController::class, 'qualityRoutes']);
         Route::get('/stats',                         [IncidentController::class, 'stats']);
         Route::get('/',                              [IncidentController::class, 'index']);
-        Route::post('/',                             [IncidentController::class, 'store'])->middleware('role:manager,dispatcher');
-        // Libre-service chauffeur : driver_id forcé côté serveur, ne relâche pas
-        // le gate manager,dispatcher de la route ci-dessus.
-        Route::post('/mine',                         [IncidentController::class, 'storeMine'])->middleware('role:driver');
+        Route::post('/',                             [IncidentController::class, 'store']);
         Route::get('/{incident}',                    [IncidentController::class, 'show']);
         Route::patch('/{incident}/status',           [IncidentController::class, 'updateStatus'])->middleware('role:manager');
         Route::delete('/{incident}',                 [IncidentController::class, 'destroy'])->middleware('role:manager');
-        Route::post('/{incident}/actions',           [IncidentController::class, 'addAction'])->middleware('role:manager,dispatcher');
+        Route::post('/{incident}/actions',           [IncidentController::class, 'addAction']);
         Route::get('/{incident}/actions',            [IncidentController::class, 'indexActions']);
-        Route::post('/{incident}/media',             [IncidentController::class, 'uploadMedia'])->middleware('role:manager,dispatcher');
+        Route::post('/{incident}/media',             [IncidentController::class, 'uploadMedia']);
         Route::get('/{incident}/media/{media}/download', [IncidentController::class, 'downloadMedia']);
     });
+    // Libre-service chauffeur : driver_id forcé côté serveur, ne relâche pas
+    // le gate manager,dispatcher du groupe ci-dessus. Route séparée du groupe
+    // car role:driver n'est pas dans manager,dispatcher.
+    Route::post('incidents/mine', [IncidentController::class, 'storeMine'])->middleware('role:driver');
 
     // ── MODULE BILLETTERIE ────────────────────────────────────────────
     // Caissier vend au guichet — embarquement désormais réservé au Contrôleur

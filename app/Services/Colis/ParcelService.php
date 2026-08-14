@@ -13,6 +13,7 @@ use App\Services\Audit\ActivityLogger;
 use App\Services\Fuel\AlertDispatcher;
 use App\Services\Notifications\NotificationService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ParcelService
 {
@@ -241,12 +242,17 @@ class ParcelService
         return $parcel->fresh();
     }
 
+    // Le suffixe aléatoire (36^6 combinaisons) est nécessaire : /v1/colis/track/{tracking_number}
+    // est un endpoint public sans mot de passe (voir routes/api.php), donc le
+    // tracking_number EST le seul secret protégeant les données du client
+    // (noms, téléphone partiel, statut...). Un format strictement séquentiel
+    // (COL-2026-000001, 000002, ...) serait énumérable en quelques heures.
     private function nextTrackingNumber(): string
     {
         $year  = (int) now()->year;
         $count = Parcel::whereYear('registered_at', $year)->count();
 
-        return sprintf('COL-%d-%06d', $year, $count + 1);
+        return sprintf('COL-%d-%06d-%s', $year, $count + 1, Str::upper(Str::random(6)));
     }
 
     private function generatePickupCode(): string

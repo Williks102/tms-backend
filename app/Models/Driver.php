@@ -23,6 +23,13 @@ class Driver extends Model
         'contract_type', 'contract_end_date', 'base_salary_fcfa', 'parts_fiscales',
     ];
 
+    // Masqués par défaut de toute sérialisation JSON — GET /drivers et
+    // /drivers/{id} sont accessibles à tout rôle authentifié (lecture ouverte,
+    // comme le reste du module planning), mais le salaire ne doit être visible
+    // que par manager/rh, comme pour le module HR. Voir
+    // DriverController::canViewSalary() qui les rend visibles au cas par cas.
+    protected $hidden = ['base_salary_fcfa', 'parts_fiscales'];
+
     protected $casts = [
         'license_expires_at' => 'date',
         'medical_expires_at' => 'date',
